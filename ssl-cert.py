@@ -29,6 +29,27 @@ def extract_x509_info(chain):
             san = ext.__str__().replace('DNS', '').replace(':', '').split(', ')
     return san
 
+
+def grade_ssl(cert_list):
+    for cert in cert_list:
+        warning=False
+        if cert['pubkey']['bits'] < 2048:
+            print(f"WARNING bits={cert['pubkey']['bits']}\n")
+            warning=True
+            
+        if cert['expired']:
+            print("WARNING EXPIRED CERT")
+            warning=True
+            
+        if 'SSLv3' in cert['version']:
+            print("WARNING SSLv3 SUPPORTED")
+            warning=True
+        
+        if warning:
+            print(f"REVIEW: host={cert['hostname']} alt={cert['altnames']} for issues \n")
+
+
+
 if os.getenv('SHODAN_API', None):
     SHODAN_API=os.environ['SHODAN_API']
 else:
@@ -36,14 +57,14 @@ else:
     sys.exit(1)
 
 api = Shodan(SHODAN_API)
-#domain="amorin.org"
 domain="wpi.edu"
 #domain="amazon.com"
 query="ssl.cert.subject.cn:"+domain
 
-TESTING_LOCAL=False
+TESTING_LOCAL=True
 if TESTING_LOCAL:
     try:
+        print("reading cached data from results.pkl\n")
         with open("results.pkl","rb") as f:
             results=pickle.load(f)
     except IOError:
@@ -55,7 +76,7 @@ else:
 
 
 
-certlist=[]
+cert_list=[]
 for service in results['matches']:
     certinfo = { 'ip' : service['ip_str'],
                  'hostname' : service['hostnames'],
@@ -69,9 +90,11 @@ for service in results['matches']:
                  'version' : service['ssl']['versions'],
     }
     certinfo['altnames']=extract_x509_info(service['ssl']['chain'])
-    certlist.append(certinfo)
+    cert_list.append(certinfo)
 
-pprint(certlist)
+
+grade_ssl(cert_list)
+#pprint(cert_list)
 
 
 
