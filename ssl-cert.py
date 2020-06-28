@@ -7,6 +7,8 @@ from datetime import datetime
 import certifi
 import pem
 import logging
+import argparse
+
 
 ROOT_STORE=None
 
@@ -189,6 +191,11 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
 
 if __name__ == "__main__":
     #logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+    parser = argparse.ArgumentParser(prog='ssl-cert.py',description='ssl-cert grader')
+    parser.add_argument('domain', action="store")
+    args = parser.parse_args()
+    pprint(args)
+
     logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
     if os.getenv('SHODAN_API', None):
@@ -201,8 +208,8 @@ if __name__ == "__main__":
     ROOT_STORE=load_ca_root()
 
     #domain="amazon.com"
-    domain="wpi.edu"
-    query="ssl.cert.subject.cn:"+domain
+    #domain="wpi.edu"
+    query="ssl.cert.subject.cn:"+args.domain
     TESTING_LOCAL=True
 
     search(SHODAN_API, query, TESTING_LOCAL)
