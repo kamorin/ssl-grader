@@ -3,6 +3,7 @@ from shodan import Shodan
 from pprint import pprint
 import pickle
 from OpenSSL import crypto
+from datetime import datetime
 
 # crypto is a bit harder to work with vs. OpenSSL, but has more functionality.
 from cryptography import x509
@@ -48,12 +49,15 @@ def verify_chain_of_trust(cert_pem, trusted_cert_pems):
     # Create and fill a X509Sore with trusted certs
     store = crypto.X509Store()
     for trusted_cert_pem in trusted_cert_pems:
+        #pprint(trusted_cert_pem)
         trusted_cert = crypto.load_certificate(crypto.FILETYPE_PEM, trusted_cert_pem)
+        pprint(trusted_cert.get_subject())
         store.add_cert(trusted_cert)
         print("adding trusted_certs!!!\n\n\n")
     # Create a X590StoreContext with the cert and trusted certs
     # and verify the the chain of trust
     store_ctx = crypto.X509StoreContext(store, certificate)
+
     # Returns None if certificate can be validated
     result = store_ctx.verify_certificate()
     if result is None:
@@ -70,6 +74,7 @@ def grade_ssl(cert_list):
             print(f"WARNING signature algorith weak {cert['sig_alg']}")
             warning=True
 
+        # dhparams': {'bits': 4096,
         # ECDHE enable forward secrecy with modern web browsers
 
         print(f"{cert['cipher']}")
@@ -143,7 +148,9 @@ for service in results['matches']:
                  'sig_alg' : service['ssl']['cert']['sig_alg'],
                  'cipher'  : service['ssl']['cipher'],
                  'version' : service['ssl']['versions'],
-    }
+                 'dhparams'  : service['ssl']['dhparams'],
+                 'issued'  : datetime.strptime(service['ssl']['cert']['issued'], "%Y%m%d%H%M%SZ"),
+                }
     certinfo['altnames']=extract_x509_info(service['ssl']['chain'])
     cert_list.append(certinfo)
 
