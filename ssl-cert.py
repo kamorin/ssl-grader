@@ -45,10 +45,12 @@ def extract_x509_info(chain):
 
     if len(chain)>1:
         verify_chain_of_trust(chain[0], chain[1:])
+    else:
+        verify_chain_of_trust(chain[0])
     return san
 
 
-def verify_chain_of_trust(cert_pem, trusted_cert_pems):
+def verify_chain_of_trust(cert_pem, trusted_cert_pems=None):
     '''  openssl manual validation of chain 
         
         :param cert_pem: server cert in PEM UTF-8 string format
@@ -58,17 +60,18 @@ def verify_chain_of_trust(cert_pem, trusted_cert_pems):
         :return: return true if chain is verified
         :rtype: bool
     '''
-    logging.debug(f"\n\n\nVERIFYING CHAIN OF TRUST    length of intermediate certs = {len(trusted_cert_pems)}")
+    logging.debug(f"\n\n\nVERIFYING CHAIN OF TRUST ")
     #print(cert_pem+"\n\n")
 
     certificate = crypto.load_certificate(crypto.FILETYPE_PEM, cert_pem)
     logging.debug(f"loaded server certification {certificate.get_subject()}")
     
-    for trusted_cert_pem in trusted_cert_pems:
-        #pprint(trusted_cert_pem)
-        trusted_cert = crypto.load_certificate(crypto.FILETYPE_PEM, trusted_cert_pem)
-        logging.debug(f"added intermediate cert {trusted_cert.get_subject()} \n")
-        ROOT_STORE.add_cert(trusted_cert)
+    if trusted_cert_pems:
+        for trusted_cert_pem in trusted_cert_pems:
+            #pprint(trusted_cert_pem)
+            trusted_cert = crypto.load_certificate(crypto.FILETYPE_PEM, trusted_cert_pem)
+            logging.debug(f"added intermediate cert {trusted_cert.get_subject()} \n")
+            ROOT_STORE.add_cert(trusted_cert)
 
     # and verify the the chain of trust
     store_ctx = crypto.X509StoreContext(ROOT_STORE, certificate)
@@ -82,7 +85,7 @@ def verify_chain_of_trust(cert_pem, trusted_cert_pems):
         result=False
 
     if result is None:
-        print("Validated")
+        logging.info("Validated")
         return True
     else:
         return False
