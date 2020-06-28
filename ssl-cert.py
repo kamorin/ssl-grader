@@ -7,43 +7,33 @@ from datetime import datetime
 import certifi
 import pem
 
-# crypto is a bit harder to work with vs. OpenSSL, but has more functionality.
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
-from cryptography.x509.oid import NameOID, ExtensionOID
-from cryptography.x509.general_name import DNSName
+ROOT_STORE=None
 
 
 def load_ca_root():
-    ''' load CAs trusted root '''
+    ''' load all certificates found in openssl cert.pem (via certifi.where())
+        
+        :return: returns X509store obj loaded with trusted Cert.  
+        :rtype: X509store
+    '''
     store = crypto.X509Store()
     try:
         with open(certifi.where(), 'rb') as f:
             certs=pem.parse(f.read())
             for cert in certs:
-                print(f"trying to load cert {cert.as_text()}")
                 cacert = crypto.load_certificate(crypto.FILETYPE_PEM, cert.as_text())
                 store.add_cert(cacert)
-                print(f"loading root CA store w/ {cacert.get_subject()} {cacert.get_serial_number()} ")
+                print(f"loading root CA store w/ {cacert.get_subject()} ")
     except EnvironmentError: # parent of IOError, OSError *and* WindowsError where available
         print(f'No CA Store found at {certifi.where()}, can not validate')
     return store
 
 
-def extract_x509_info_via_crypto(chain):
-    ''' parse PEM formated certificate chain list for v3 extention alt-names'''
-    chain_info={}
-    cert_obj = x509.load_pem_x509_certificate(str.encode(chain), default_backend())
-    common_name = cert_obj.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
-    chain_info['cn']=common_name
-    san = cert_obj.extensions.get_extension_for_class(x509.SubjectAlternativeName)
-    san_dns_names = san.value.get_values_for_type(DNSName)
-    chain_info['altnames']=san_dns_names
-    return chain_info
-
-
 def extract_x509_info(chain):
     ''' parse PEM formated certificate chain list for v3 extention alt-names
+
+        :param chain: list of PEM certs in UTF-8 string format
+        :type chain: list
     '''
     x509cert=crypto.load_certificate(crypto.FILETYPE_PEM, chain[0])
     san = ''
@@ -59,36 +49,32 @@ def extract_x509_info(chain):
     return san
 
 
-
 def verify_chain_of_trust(cert_pem, trusted_cert_pems):
-    '''  openssl manual validation of chain '''
-    
-    print("\n\n\n***VERIFYING CHAIN OF TRUST****length of intermediate certs = {}\n\n".format(len(trusted_cert_pems)))
-    print(cert_pem+"\n\n")
-    print(trusted_cert_pems[0])
-    print("type={}".format(type(trusted_cert_pems)))
-    #pprint(f"trusted crt {len(trusted_cert_pems)}")
+    '''  openssl manual validation of chain 
+        
+        :param cert_pem: server cert in PEM UTF-8 string format
+        :type cert_pem: str
+        :param trusted_cert_pem: list of intermediate certs in PEM UTF-8 string format
+        :type trusted_cert_pem: list of str
+        :return: return true if chain is verified
+        :rtype: bool
+    '''
+    print(f"\n\n\n***VERIFYING CHAIN OF TRUST****length of intermediate certs = {len(trusted_cert_pems)}")
+    #print(cert_pem+"\n\n")
 
-    print("\n\n\nstarting server certification load!!!!")
+    print("\n\n\nstarting server certification load...")
     certificate = crypto.load_certificate(crypto.FILETYPE_PEM, cert_pem)
     pprint(certificate.get_subject())
-    print("loaded server cert!!!!\n\n\n")
-
-    # Create and fill a X509Sore with trusted certs
-    print("loading CA store!!!\n\n\n")
-    store = load_ca_root()
-    #store = crypto.X509Store()
-
+    
     for trusted_cert_pem in trusted_cert_pems:
-        print("\n\n\nprocessing intermediate cert, adding to store!!")
+        print("\n\n\nprocessing intermediate cert, adding to store...")
         #pprint(trusted_cert_pem)
         trusted_cert = crypto.load_certificate(crypto.FILETYPE_PEM, trusted_cert_pem)
-        print(f"{trusted_cert.get_subject()} \n{trusted_cert.get_issuer()} \n {trusted_cert.get_notAfter()}")
-        store.add_cert(trusted_cert)
-        print("added intermediate Cert!!!\n\n\n")
+        print(f"{trusted_cert.get_subject()} \n{trusted_cert.get_issuer()} \n")
+        ROOT_STORE.add_cert(trusted_cert)
 
     # and verify the the chain of trust
-    store_ctx = crypto.X509StoreContext(store, certificate)
+    store_ctx = crypto.X509StoreContext(ROOT_STORE, certificate)
 
     # Returns None if certificate can be validated
     result=None
@@ -100,7 +86,6 @@ def verify_chain_of_trust(cert_pem, trusted_cert_pems):
         print("\n\n\nERRRRRRROR!!!!!!\n\n\n\n")
         sys.exit(1)
 
-    
     if result is None:
         print("\n\n\nVALIDATED!!!!!!\n\n\n\n")
         sys.exit(1)
@@ -111,7 +96,13 @@ def verify_chain_of_trust(cert_pem, trusted_cert_pems):
 
 
 def grade_ssl(cert_list):
-    ''' grader '''
+    ''' grader 
+
+        :param cert_list: list of dictionaries, each with information on a certificate to grade
+        :type cert_list: list of dict
+        :return: ...TDB...
+        :rtype: ...TDB...
+    '''
     for cert in cert_list:
         #pprint(cert['sig_alg'])
         warning=False
@@ -206,7 +197,10 @@ if __name__ == "__main__":
     else:
         print("Set SHODAN_API ENV")
         sys.exit(1)
-    
+
+    # load root store    
+    ROOT_STORE=load_ca_root()
+
     #domain="amazon.com"
     domain="wpi.edu"
     query="ssl.cert.subject.cn:"+domain
