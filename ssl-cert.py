@@ -185,7 +185,7 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
         log(f"**Querying Shodan with Search query {query}\n",'INFO')
         results=api.search(query)
 
-    cert_list=[]
+    graded_certs=[]
     for service in results['matches']:
         certinfo = { 'ip' : service['ip_str'],
                     'hostname' : service['hostnames'],
@@ -201,12 +201,11 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
                     'issued'  : datetime.strptime(service['ssl']['cert']['issued'], "%Y%m%d%H%M%SZ"),
                     }
         certinfo['altnames']=extract_x509_info(service['ssl']['chain'])
-        mycert=gradedCert(**certinfo)
-        mycert.grade_cert()
-        print(f" \n\n\nthe cert is graded: {mycert.grade} with issues: {mycert.issues}")
-        
-        cert_list.append(certinfo)
-        
+        cert=gradedCert(**certinfo)
+        cert.grade_cert()
+        graded_certs.append(cert)
+        print(f" \n\n\nthe cert is graded: {cert.grade} with issues: {cert.issues}")
+                
     #grade_ssl(cert_list)
     #pprint(cert_list)
 
