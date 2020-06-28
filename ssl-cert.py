@@ -1,6 +1,16 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""SSL Grader"""
+
+__author__      = "Kevin Amorin"
+__copyright__   = "Copyright 2020"
+__license__ = "GPL"
+__version__ = "1.0.1"
+
 import sys,os
 from shodan import Shodan
-from pprint import pprint
+from pprint import pprint,pformat
 import pickle
 from OpenSSL import crypto
 from datetime import datetime
@@ -12,12 +22,62 @@ import argparse
 
 ROOT_STORE=None
 
-class certGrader(object):
+def log(s,type='DEBUG'):
+    for line in pformat(s).split('\n'):
+        if type in 'DEBUG':
+            logging.debug(line)
+        else:
+            print(s)
+            logging.info(line)
+    logging.debug("\n")
+
+class gradedCert(object):
+    '''  
     '''
-    '''
+    grade=100
+    issues=[]
+
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+    def grade_cert(self):
+        ''' process cert attributes, add to list of issues and update grade
+        '''
+        pprint(self)
+        if self.sig_alg != 'sha256WithRSAEncryption':
+            self.issues.append(f"WARNING signature algorith weak {self.sig_alg}")
+            self.grade-=10
+            
+        # dhparams': {'bits': 4096,
+        # ECDHE enable forward secrecy with modern web browsers
+
+        log(f"{self.cipher}")
+        if 'RSA' not in self.cipher['name']   \
+                or 'ADH' in self.cipher['name']  \
+                or 'CBC' in self.cipher['name']  \
+                or 'RC4' in self.cipher['name']  \
+                or 'TLS-RSA' in self.cipher['name']:
+            self.issues.append(f"WARNING bad cipher {self.cipher}")
+            self.issues.append('Since Cipher Block Chaining (CBC) ciphers were marked as weak (around March 2019) many, many sites now show a bunch of weak ciphers enabled and some are even exploitable via Zombie Poodle and Goldendoodle')   
+            self.grade-=10
+
+        if self.cipher['pubkey']['bits'] < 2048:
+            self.issues.append(f"WARNING bits={self.cipher['pubkey']['bits']}")
+            self.grade-=10
+            
+        if self.cipher['expired']:
+            self.issues.append(f"WARNING EXPIRED CERT {self.ciphere['xpires']}")
+            self.grade-=10
+            
+        if 'SSLv3' in self.cipher['version']:
+            self.issues.append("WARNING SSLv3 SUPPORTED")
+            self.grade-=10
+
+        if 'TLSv1' in self.cipher['version']:
+            self.issues.append("WARNING TLSv1 SUPPORTED")
+            self.grade-=10
+
 
 
 def load_ca_root():
@@ -33,7 +93,7 @@ def load_ca_root():
             for cert in certs:
                 cacert = crypto.load_certificate(crypto.FILETYPE_PEM, cert.as_text())
                 store.add_cert(cacert)
-                logging.debug(f"loading root CA store w/ {cacert.get_subject()} ")
+                log(f"loading root CA store w/ {cacert.get_subject()} ")
     except EnvironmentError: # parent of IOError, OSError *and* WindowsError where available
         print(f'No CA Store found at {certifi.where()}, can not validate')
     return store
@@ -70,17 +130,17 @@ def verify_chain_of_trust(cert_pem, trusted_cert_pems=None):
         :return: return true if chain is verified
         :rtype: bool
     '''
-    logging.debug(f"\n\n\nVERIFYING CHAIN OF TRUST ")
+    log(f"\n\n\nVERIFYING CHAIN OF TRUST ")
     #print(cert_pem+"\n\n")
 
     certificate = crypto.load_certificate(crypto.FILETYPE_PEM, cert_pem)
-    logging.debug(f"loaded server certification {certificate.get_subject()}")
+    log(f"loaded server certification {certificate.get_subject()}")
     
     if trusted_cert_pems:
         for trusted_cert_pem in trusted_cert_pems:
             #pprint(trusted_cert_pem)
             trusted_cert = crypto.load_certificate(crypto.FILETYPE_PEM, trusted_cert_pem)
-            logging.debug(f"added intermediate cert {trusted_cert.get_subject()} \n")
+            log(f"added intermediate cert {trusted_cert.get_subject()} \n")
             ROOT_STORE.add_cert(trusted_cert)
 
     # and verify the the chain of trust
@@ -95,63 +155,11 @@ def verify_chain_of_trust(cert_pem, trusted_cert_pems=None):
         result=False
 
     if result is None:
-        logging.info("Validated")
+        log("Validated",'INFO')
         return True
     else:
         return False
     
-
-
-def grade_ssl(cert_list):
-    ''' grader 
-
-        :param cert_list: list of dictionaries, each with information on a certificate to grade
-        :type cert_list: list of dict
-        :return: ...TDB...
-        :rtype: ...TDB...
-    '''
-    for cert in cert_list:
-        #pprint(cert['sig_alg'])
-        warning=False
-        if cert['sig_alg'] != 'sha256WithRSAEncryption':
-            print(f"WARNING signature algorith weak {cert['sig_alg']}")
-            warning=True
-
-        # dhparams': {'bits': 4096,
-        # ECDHE enable forward secrecy with modern web browsers
-
-        print(f"{cert['cipher']}")
-        if 'RSA' not in cert['cipher']['name']   \
-                or 'ADH' in cert['cipher']['name']  \
-                or 'CBC' in cert['cipher']['name']  \
-                or 'RC4' in cert['cipher']['name']  \
-                or 'TLS-RSA' in cert['cipher']['name']:
-            print(f"WARNING bad cipher {cert['cipher']}")
-            print('Since Cipher Block Chaining (CBC) ciphers were marked as weak (around March 2019) many, many sites now show a bunch of weak ciphers enabled and some are even exploitable via Zombie Poodle and Goldendoodle')
-            warning=True      
-
-        if cert['pubkey']['bits'] < 2048:
-            print(f"WARNING bits={cert['pubkey']['bits']}")
-            warning=True
-            
-        if cert['expired']:
-            print("WARNING EXPIRED CERT")
-            print(f"{cert['expires']}\n")
-            warning=True
-            
-        if 'SSLv3' in cert['version']:
-            print("WARNING SSLv3 SUPPORTED")
-            warning=True
-        
-        if 'TLSv1' in cert['version']:
-            print("WARNING TLSv1 SUPPORTED")
-            warning=True
-        
-        if warning:
-            # print(f"REVIEW: host={cert['hostname']} alt={cert['altnames']} for issues \n")
-            print(f"REVIEW: host={cert['hostname']} for issues \n")
-
-
 
 def search(SHODAN_API, query, TESTING_LOCAL=False):
     '''  call Shodan API and process results
@@ -159,37 +167,19 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
     api = Shodan(SHODAN_API)
     if TESTING_LOCAL:
         try:
-            logging.info("\n\n**LOCAL TESTING ENABLED**\nReading cached data from results.pkl\n")
+            log("\n\n**LOCAL TESTING ENABLED**\nReading cached data from results.pkl\n",'INFO')
             with open("results.pkl","rb") as f:
                 results=pickle.load(f)
         except IOError:
-            logging.info("**Cache file not accessible, regening file")
+            log("**Cache file not accessible, regening file",'INFO')
             results=api.search(query)
             pickle.dump(results,open("results.pkl","wb"))
     else:
-        logging.info(f"**Querying Shodan with Search query {query}\n")
+        log(f"**Querying Shodan with Search query {query}\n",'INFO')
         results=api.search(query)
 
     cert_list=[]
     for service in results['matches']:
-        #pprint(service)
-        #break
-        # mycert=certGrader( {  'ip' : service['ip_str'],
-        #                     'hostname' : service['hostnames'],
-        #                     'isp' : service['isp'],
-        #                     'subject' : service['ssl']['cert']['subject']['CN'],
-        #                     'expired' : service['ssl']['cert']['expired'],
-        #                     'expires' : service['ssl']['cert']['expires'],
-        #                     'pubkey'  : service['ssl']['cert']['pubkey'],
-        #                     'sig_alg' : service['ssl']['cert']['sig_alg'],
-        #                     'cipher'  : service['ssl']['cipher'],
-        #                     'version' : service['ssl']['versions'],
-        #                     'dhparams': service['ssl'].get('dhparams',{'bits':float('inf'),'fingerprint':''}),
-        #                     'issued'  : datetime.strptime(service['ssl']['cert']['issued'], "%Y%m%d%H%M%SZ"),
-        #                 }
-        # )
-        # print(mycert.issued)
-
         certinfo = { 'ip' : service['ip_str'],
                     'hostname' : service['hostnames'],
                     'isp' : service['isp'],
@@ -203,8 +193,9 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
                     'dhparams': service['ssl'].get('dhparams',{'bits':float('inf'),'fingerprint':''}),
                     'issued'  : datetime.strptime(service['ssl']['cert']['issued'], "%Y%m%d%H%M%SZ"),
                     }
-        mycert=certGrader(**certinfo)
-        logging.debug(certinfo)
+        mycert=gradedCert(**certinfo)
+        log(certinfo)
+
 
         certinfo['altnames']=extract_x509_info(service['ssl']['chain'])
         cert_list.append(certinfo)
@@ -221,8 +212,7 @@ if __name__ == "__main__":
     parser.add_argument('--domain', required=False)
     args = parser.parse_args()
 
-    #logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
-    logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG, format='%(message)s')
 
     if os.getenv('SHODAN_API', None):
         SHODAN_API=os.environ['SHODAN_API']
