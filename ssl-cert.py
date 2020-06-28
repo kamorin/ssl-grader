@@ -20,8 +20,7 @@ def load_ca_root():
         with open(certifi.where(), 'rb') as f:
             cacert = crypto.load_certificate(crypto.FILETYPE_PEM, f.read())
             store.add_cert(cacert)
-            pprint(cacert.get_subject())
-            pprint(cacert.get_serial_number())
+            print(f"loading root CA store w/ {cacert.get_subject()} {cacert.get_serial_number()} ")
     except EnvironmentError: # parent of IOError, OSError *and* WindowsError where available
         print(f'No CA Store found at {certifi.where()}, can not validate')
     return store
@@ -144,56 +143,60 @@ def grade_ssl(cert_list):
             print(f"REVIEW: host={cert['hostname']} for issues \n")
 
 
-if os.getenv('SHODAN_API', None):
-    SHODAN_API=os.environ['SHODAN_API']
-else:
-    print("Set SHODAN_API ENV")
-    sys.exit(1)
-
-api = Shodan(SHODAN_API)
-domain="wpi.edu"
-#domain="amazon.com"
-query="ssl.cert.subject.cn:"+domain
-
-TESTING_LOCAL=True
-if TESTING_LOCAL:
-    try:
-        print("\n\n**Reading cached data from results.pkl\n")
-        with open("results.pkl","rb") as f:
-            results=pickle.load(f)
-    except IOError:
-        print("**Cache file not accessible, regening file")
+def search(SHODAN_API, query, TESTING_LOCAL=False):
+    api = Shodan(SHODAN_API)
+    if TESTING_LOCAL:
+        try:
+            print("\n\n**LOCAL TESTING ENABLED**\nReading cached data from results.pkl\n")
+            with open("results.pkl","rb") as f:
+                results=pickle.load(f)
+        except IOError:
+            print("**Cache file not accessible, regening file")
+            results=api.search(query)
+            pickle.dump(results,open("results.pkl","wb"))
+    else:
+        print(f"**Querying Shodan with Search query {query}\n")
         results=api.search(query)
-        pickle.dump(results,open("results.pkl","wb"))
-else:
-    print(f"**Querying Shodan with Search query {query}\n")
-    results=api.search(query)
 
-cert_list=[]
-for service in results['matches']:
-    #pprint(service)
-    #break
-    certinfo = { 'ip' : service['ip_str'],
-                 'hostname' : service['hostnames'],
-                 'isp' : service['isp'],
-                 'subject' : service['ssl']['cert']['subject']['CN'],
-                 'expired' : service['ssl']['cert']['expired'],
-                 'expires' : service['ssl']['cert']['expires'],
-                 'pubkey'  : service['ssl']['cert']['pubkey'],
-                 'sig_alg' : service['ssl']['cert']['sig_alg'],
-                 'cipher'  : service['ssl']['cipher'],
-                 'version' : service['ssl']['versions'],
-                 'dhparams': service['ssl'].get('dhparams',{'bits':float('inf'),'fingerprint':''}),
-                 'issued'  : datetime.strptime(service['ssl']['cert']['issued'], "%Y%m%d%H%M%SZ"),
-                }
-    print("\n\n\n\n")
-    pprint(certinfo)
+    cert_list=[]
+    for service in results['matches']:
+        #pprint(service)
+        #break
+        certinfo = { 'ip' : service['ip_str'],
+                    'hostname' : service['hostnames'],
+                    'isp' : service['isp'],
+                    'subject' : service['ssl']['cert']['subject']['CN'],
+                    'expired' : service['ssl']['cert']['expired'],
+                    'expires' : service['ssl']['cert']['expires'],
+                    'pubkey'  : service['ssl']['cert']['pubkey'],
+                    'sig_alg' : service['ssl']['cert']['sig_alg'],
+                    'cipher'  : service['ssl']['cipher'],
+                    'version' : service['ssl']['versions'],
+                    'dhparams': service['ssl'].get('dhparams',{'bits':float('inf'),'fingerprint':''}),
+                    'issued'  : datetime.strptime(service['ssl']['cert']['issued'], "%Y%m%d%H%M%SZ"),
+                    }
+        print("\n\n\n\n")
+        pprint(certinfo)
 
-    certinfo['altnames']=extract_x509_info(service['ssl']['chain'])
-    cert_list.append(certinfo)
+        certinfo['altnames']=extract_x509_info(service['ssl']['chain'])
+        cert_list.append(certinfo)
 
-#grade_ssl(cert_list)
-#pprint(cert_list)
+    #grade_ssl(cert_list)
+    #pprint(cert_list)
 
 
 
+
+if __name__ == "__main__":
+    if os.getenv('SHODAN_API', None):
+        SHODAN_API=os.environ['SHODAN_API']
+    else:
+        print("Set SHODAN_API ENV")
+        sys.exit(1)
+    
+    #domain="amazon.com"
+    domain="wpi.edu"
+    query="ssl.cert.subject.cn:"+domain
+    TESTING_LOCAL=True
+
+    search(SHODAN_API, query, TESTING_LOCAL)
