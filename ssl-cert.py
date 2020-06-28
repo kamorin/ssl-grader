@@ -6,9 +6,9 @@ from OpenSSL import crypto
 from datetime import datetime
 import certifi
 import pem
+import logging
 
 ROOT_STORE=None
-
 
 def load_ca_root():
     ''' load all certificates found in openssl cert.pem (via certifi.where())
@@ -23,7 +23,7 @@ def load_ca_root():
             for cert in certs:
                 cacert = crypto.load_certificate(crypto.FILETYPE_PEM, cert.as_text())
                 store.add_cert(cacert)
-                print(f"loading root CA store w/ {cacert.get_subject()} ")
+                logging.debug(f"loading root CA store w/ {cacert.get_subject()} ")
     except EnvironmentError: # parent of IOError, OSError *and* WindowsError where available
         print(f'No CA Store found at {certifi.where()}, can not validate')
     return store
@@ -43,7 +43,6 @@ def extract_x509_info(chain):
         if 'subjectAltName' in str(ext.get_short_name()):
             san = ext.__str__().replace('DNS', '').replace(':', '').split(', ')
 
-    print(f"Chain length = {len(chain)}")
     if len(chain)>1:
         verify_chain_of_trust(chain[0], chain[1:])
     return san
@@ -59,18 +58,16 @@ def verify_chain_of_trust(cert_pem, trusted_cert_pems):
         :return: return true if chain is verified
         :rtype: bool
     '''
-    print(f"\n\n\n***VERIFYING CHAIN OF TRUST****length of intermediate certs = {len(trusted_cert_pems)}")
+    logging.debug(f"\n\n\nVERIFYING CHAIN OF TRUST    length of intermediate certs = {len(trusted_cert_pems)}")
     #print(cert_pem+"\n\n")
 
-    print("\n\n\nstarting server certification load...")
     certificate = crypto.load_certificate(crypto.FILETYPE_PEM, cert_pem)
-    pprint(certificate.get_subject())
+    logging.debug(f"loaded server certification {certificate.get_subject()}")
     
     for trusted_cert_pem in trusted_cert_pems:
-        print("\n\n\nprocessing intermediate cert, adding to store...")
         #pprint(trusted_cert_pem)
         trusted_cert = crypto.load_certificate(crypto.FILETYPE_PEM, trusted_cert_pem)
-        print(f"{trusted_cert.get_subject()} \n{trusted_cert.get_issuer()} \n")
+        logging.debug(f"added intermediate cert {trusted_cert.get_subject()} \n")
         ROOT_STORE.add_cert(trusted_cert)
 
     # and verify the the chain of trust
@@ -83,12 +80,9 @@ def verify_chain_of_trust(cert_pem, trusted_cert_pems):
     except Exception as e:
         print('exception occurred, value:', e)
         result=False
-        print("\n\n\nERRRRRRROR!!!!!!\n\n\n\n")
-        sys.exit(1)
 
     if result is None:
-        print("\n\n\nVALIDATED!!!!!!\n\n\n\n")
-        sys.exit(1)
+        print("Validated")
         return True
     else:
         return False
@@ -152,15 +146,15 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
     api = Shodan(SHODAN_API)
     if TESTING_LOCAL:
         try:
-            print("\n\n**LOCAL TESTING ENABLED**\nReading cached data from results.pkl\n")
+            logging.info("\n\n**LOCAL TESTING ENABLED**\nReading cached data from results.pkl\n")
             with open("results.pkl","rb") as f:
                 results=pickle.load(f)
         except IOError:
-            print("**Cache file not accessible, regening file")
+            logging.info("**Cache file not accessible, regening file")
             results=api.search(query)
             pickle.dump(results,open("results.pkl","wb"))
     else:
-        print(f"**Querying Shodan with Search query {query}\n")
+        logging.info(f"**Querying Shodan with Search query {query}\n")
         results=api.search(query)
 
     cert_list=[]
@@ -180,8 +174,7 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
                     'dhparams': service['ssl'].get('dhparams',{'bits':float('inf'),'fingerprint':''}),
                     'issued'  : datetime.strptime(service['ssl']['cert']['issued'], "%Y%m%d%H%M%SZ"),
                     }
-        print("\n\n\n\n")
-        pprint(certinfo)
+        logging.debug(certinfo)
 
         certinfo['altnames']=extract_x509_info(service['ssl']['chain'])
         cert_list.append(certinfo)
@@ -192,6 +185,9 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
 
 
 if __name__ == "__main__":
+    #logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+    logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+
     if os.getenv('SHODAN_API', None):
         SHODAN_API=os.environ['SHODAN_API']
     else:
