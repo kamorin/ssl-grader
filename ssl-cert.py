@@ -21,7 +21,13 @@ import argparse
 ROOT_STORE=None
 
 def log(s,type='INFO'):
-    for line in pformat(s).split('\n'):
+    '''  TODO: update to handle types better
+    '''
+    if isinstance(s,str):
+        lines=pformat(s.splitlines()).splitlines()
+    else:
+        lines=pformat(s).splitlines()
+    for line in lines:
         if type in 'DEBUG':
             logging.debug(line)
             logging.debug("\n")
@@ -47,15 +53,13 @@ class gradedCert(object):
     def grade_cert(self):
         ''' process cert attributes, add to list of issues and update grade
         '''
-        pprint(self)
         if self.sig_alg != 'sha256WithRSAEncryption':
             self.issues.append(f"WARNING signature algorith weak {self.sig_alg}")
             self.grade-=10
             
         # dhparams': {'bits': 4096,
         # ECDHE enable forward secrecy with modern web browsers
-
-        log(f"{self.cipher}")
+        
         if 'RSA' not in self.cipher['name']   \
                 or 'ADH' in self.cipher['name']  \
                 or 'CBC' in self.cipher['name']  \
@@ -65,11 +69,11 @@ class gradedCert(object):
             self.issues.append('Since Cipher Block Chaining (CBC) ciphers were marked as weak (around March 2019) many, many sites now show a bunch of weak ciphers enabled and some are even exploitable via Zombie Poodle and Goldendoodle')   
             self.grade-=10
 
-        if self.cipher['pubkey']['bits'] < 2048:
+        if self.pubkey['bits'] < 2048:
             self.issues.append(f"WARNING bits={self.cipher['pubkey']['bits']}")
             self.grade-=10
             
-        if self.cipher['expired']:
+        if self.expired:
             self.issues.append(f"WARNING EXPIRED CERT {self.ciphere['xpires']}")
             self.grade-=10
             
@@ -169,7 +173,7 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
     api = Shodan(SHODAN_API)
     if TESTING_LOCAL:
         try:
-            log("\n\n**LOCAL TESTING ENABLED**\nReading cached data from results.pkl\n",'INFO')
+            log(f"***LOCAL TESTING ENABLED**\nReading cached data from results.pkl\n",'INFO')
             with open("results.pkl","rb") as f:
                 results=pickle.load(f)
         except IOError:
@@ -196,8 +200,9 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
                     'issued'  : datetime.strptime(service['ssl']['cert']['issued'], "%Y%m%d%H%M%SZ"),
                     }
         mycert=gradedCert(**certinfo)
-        log(mycert)
-        #mycert.issues()
+        #log(mycert)
+        mycert.grade_cert()
+        print(f" \n\n\nthe cert is graded: {mycert.grade} with issues: {mycert.issues}")
 
         sys.exit(1)
         certinfo['altnames']=extract_x509_info(service['ssl']['chain'])
