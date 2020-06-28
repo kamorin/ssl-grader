@@ -41,9 +41,10 @@ class gradedCert(object):
     '''  
     '''
     grade=100
-    issues=[]
+    issues=None
 
     def __init__(self, **kwargs):
+        self.issues=[]
         for key, value in kwargs.items():
             setattr(self, key, value)
 
@@ -70,11 +71,11 @@ class gradedCert(object):
             self.grade-=10
 
         if self.pubkey['bits'] < 2048:
-            self.issues.append(f"WARNING bits={self.cipher['pubkey']['bits']}")
+            self.issues.append(f"WARNING bits={self.pubkey['bits']}")
             self.grade-=10
             
         if self.expired:
-            self.issues.append(f"WARNING EXPIRED CERT {self.ciphere['xpires']}")
+            self.issues.append(f"WARNING EXPIRED CERT {self.expires}")
             self.grade-=10
             
         if 'SSLv3' in self.cipher['version']:
@@ -199,13 +200,11 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
                     'dhparams': service['ssl'].get('dhparams',{'bits':float('inf'),'fingerprint':''}),
                     'issued'  : datetime.strptime(service['ssl']['cert']['issued'], "%Y%m%d%H%M%SZ"),
                     }
+        certinfo['altnames']=extract_x509_info(service['ssl']['chain'])
         mycert=gradedCert(**certinfo)
-        #log(mycert)
         mycert.grade_cert()
         print(f" \n\n\nthe cert is graded: {mycert.grade} with issues: {mycert.issues}")
-
-        sys.exit(1)
-        certinfo['altnames']=extract_x509_info(service['ssl']['chain'])
+        
         cert_list.append(certinfo)
         
     #grade_ssl(cert_list)
