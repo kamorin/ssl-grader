@@ -12,6 +12,14 @@ import argparse
 
 ROOT_STORE=None
 
+class certGrader(object):
+    '''
+    '''
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+
 def load_ca_root():
     ''' load all certificates found in openssl cert.pem (via certifi.where())
         
@@ -166,6 +174,22 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
     for service in results['matches']:
         #pprint(service)
         #break
+        # mycert=certGrader( {  'ip' : service['ip_str'],
+        #                     'hostname' : service['hostnames'],
+        #                     'isp' : service['isp'],
+        #                     'subject' : service['ssl']['cert']['subject']['CN'],
+        #                     'expired' : service['ssl']['cert']['expired'],
+        #                     'expires' : service['ssl']['cert']['expires'],
+        #                     'pubkey'  : service['ssl']['cert']['pubkey'],
+        #                     'sig_alg' : service['ssl']['cert']['sig_alg'],
+        #                     'cipher'  : service['ssl']['cipher'],
+        #                     'version' : service['ssl']['versions'],
+        #                     'dhparams': service['ssl'].get('dhparams',{'bits':float('inf'),'fingerprint':''}),
+        #                     'issued'  : datetime.strptime(service['ssl']['cert']['issued'], "%Y%m%d%H%M%SZ"),
+        #                 }
+        # )
+        # print(mycert.issued)
+
         certinfo = { 'ip' : service['ip_str'],
                     'hostname' : service['hostnames'],
                     'isp' : service['isp'],
@@ -179,6 +203,7 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
                     'dhparams': service['ssl'].get('dhparams',{'bits':float('inf'),'fingerprint':''}),
                     'issued'  : datetime.strptime(service['ssl']['cert']['issued'], "%Y%m%d%H%M%SZ"),
                     }
+        mycert=certGrader(**certinfo)
         logging.debug(certinfo)
 
         certinfo['altnames']=extract_x509_info(service['ssl']['chain'])
@@ -190,11 +215,13 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
 
 
 if __name__ == "__main__":
-    #logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+    '''  parse args, set global API Keys and execute search function
+    '''
     parser = argparse.ArgumentParser(prog='ssl-cert.py',description='ssl-cert grader')
     parser.add_argument('--domain', required=False)
     args = parser.parse_args()
 
+    #logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
     logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
     if os.getenv('SHODAN_API', None):
