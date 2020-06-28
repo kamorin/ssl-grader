@@ -5,6 +5,7 @@ import pickle
 from OpenSSL import crypto
 from datetime import datetime
 import certifi
+import pem
 
 # crypto is a bit harder to work with vs. OpenSSL, but has more functionality.
 from cryptography import x509
@@ -18,9 +19,12 @@ def load_ca_root():
     store = crypto.X509Store()
     try:
         with open(certifi.where(), 'rb') as f:
-            cacert = crypto.load_certificate(crypto.FILETYPE_PEM, f.read())
-            store.add_cert(cacert)
-            print(f"loading root CA store w/ {cacert.get_subject()} {cacert.get_serial_number()} ")
+            certs=pem.parse(f.read())
+            for cert in certs:
+                print(f"trying to load cert {cert.as_text()}")
+                cacert = crypto.load_certificate(crypto.FILETYPE_PEM, cert.as_text())
+                store.add_cert(cacert)
+                print(f"loading root CA store w/ {cacert.get_subject()} {cacert.get_serial_number()} ")
     except EnvironmentError: # parent of IOError, OSError *and* WindowsError where available
         print(f'No CA Store found at {certifi.where()}, can not validate')
     return store
@@ -39,7 +43,8 @@ def extract_x509_info_via_crypto(chain):
 
 
 def extract_x509_info(chain):
-    ''' parse PEM formated certificate chain list for v3 extention alt-names'''
+    ''' parse PEM formated certificate chain list for v3 extention alt-names
+    '''
     x509cert=crypto.load_certificate(crypto.FILETYPE_PEM, chain[0])
     san = ''
     ext_count = x509cert.get_extension_count()
@@ -47,42 +52,41 @@ def extract_x509_info(chain):
         ext = x509cert.get_extension(i)
         if 'subjectAltName' in str(ext.get_short_name()):
             san = ext.__str__().replace('DNS', '').replace(':', '').split(', ')
-    
-    print("test={}".format(len(chain)))
-    #pprint(chain)
+
+    print(f"Chain length = {len(chain)}")
     if len(chain)>1:
-        #pprint(chain)
         verify_chain_of_trust(chain[0], chain[1:])
-        sys.exit(1)
     return san
+
 
 
 def verify_chain_of_trust(cert_pem, trusted_cert_pems):
     '''  openssl manual validation of chain '''
     
-    print("length of trusted = {}".format(len(trusted_cert_pems)))
-    print(trusted_cert_pems)
+    print("\n\n\n***VERIFYING CHAIN OF TRUST****length of intermediate certs = {}\n\n".format(len(trusted_cert_pems)))
+    print(cert_pem+"\n\n")
+    print(trusted_cert_pems[0])
     print("type={}".format(type(trusted_cert_pems)))
     #pprint(f"trusted crt {len(trusted_cert_pems)}")
 
-    print("starting validation!!!!\n\n\n")
+    print("\n\n\nstarting server certification load!!!!")
     certificate = crypto.load_certificate(crypto.FILETYPE_PEM, cert_pem)
     pprint(certificate.get_subject())
-    print("loaded client!!!!\n\n\n")
+    print("loaded server cert!!!!\n\n\n")
 
     # Create and fill a X509Sore with trusted certs
+    print("loading CA store!!!\n\n\n")
     store = load_ca_root()
+    #store = crypto.X509Store()
 
-    for trusted_cert_pem in trusted_cert_pems[::-1]:
+    for trusted_cert_pem in trusted_cert_pems:
+        print("\n\n\nprocessing intermediate cert, adding to store!!")
         #pprint(trusted_cert_pem)
         trusted_cert = crypto.load_certificate(crypto.FILETYPE_PEM, trusted_cert_pem)
         print(f"{trusted_cert.get_subject()} \n{trusted_cert.get_issuer()} \n {trusted_cert.get_notAfter()}")
-        #trusted_cert.get_issuer()
-        #get_notAfter()
-
         store.add_cert(trusted_cert)
-        print("adding trusted_certs!!!\n\n\n")
-    # Create a X590StoreContext with the cert and trusted certs
+        print("added intermediate Cert!!!\n\n\n")
+
     # and verify the the chain of trust
     store_ctx = crypto.X509StoreContext(store, certificate)
 
@@ -93,14 +97,21 @@ def verify_chain_of_trust(cert_pem, trusted_cert_pems):
     except Exception as e:
         print('exception occurred, value:', e)
         result=False
+        print("\n\n\nERRRRRRROR!!!!!!\n\n\n\n")
+        sys.exit(1)
 
+    
     if result is None:
+        print("\n\n\nVALIDATED!!!!!!\n\n\n\n")
+        sys.exit(1)
         return True
     else:
         return False
+    
 
 
 def grade_ssl(cert_list):
+    ''' grader '''
     for cert in cert_list:
         #pprint(cert['sig_alg'])
         warning=False
@@ -143,7 +154,10 @@ def grade_ssl(cert_list):
             print(f"REVIEW: host={cert['hostname']} for issues \n")
 
 
+
 def search(SHODAN_API, query, TESTING_LOCAL=False):
+    '''  call Shodan API and process results
+    '''
     api = Shodan(SHODAN_API)
     if TESTING_LOCAL:
         try:
@@ -183,7 +197,6 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
 
     #grade_ssl(cert_list)
     #pprint(cert_list)
-
 
 
 
