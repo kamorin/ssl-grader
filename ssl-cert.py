@@ -20,13 +20,16 @@ import argparse
 
 ROOT_STORE=None
 
-def log(s,type='DEBUG'):
+def log(s,type='INFO'):
     for line in pformat(s).split('\n'):
         if type in 'DEBUG':
             logging.debug(line)
-        else:
+            logging.debug("\n")
+        elif type in 'INFO':
             logging.info(line)
-    logging.debug("\n")
+        elif type in 'WARN':
+            logging.warn(line)
+
 
 class gradedCert(object):
     '''  
@@ -93,7 +96,7 @@ def load_ca_root():
             for cert in certs:
                 cacert = crypto.load_certificate(crypto.FILETYPE_PEM, cert.as_text())
                 store.add_cert(cacert)
-                #log(f"loading root CA store w/ {cacert.get_subject()} ")
+                log(f"loading root CA store w/ {cacert.get_subject()} ",'DEBUG')
     except EnvironmentError: # parent of IOError, OSError *and* WindowsError where available
         print(f'No CA Store found at {certifi.where()}, can not validate')
     return store
@@ -131,16 +134,15 @@ def verify_chain_of_trust(cert_pem, trusted_cert_pems=None):
         :rtype: bool
     '''
     log(f"\n\n\nVERIFYING CHAIN OF TRUST ")
-    #print(cert_pem+"\n\n")
 
     certificate = crypto.load_certificate(crypto.FILETYPE_PEM, cert_pem)
-    log(f"loaded server certification {certificate.get_subject()}")
+    log(f"loaded server certification {certificate.get_subject()}",'DEBUG')
     
     if trusted_cert_pems:
         for trusted_cert_pem in trusted_cert_pems:
             #pprint(trusted_cert_pem)
             trusted_cert = crypto.load_certificate(crypto.FILETYPE_PEM, trusted_cert_pem)
-            log(f"added intermediate cert {trusted_cert.get_subject()} \n")
+            log(f"added intermediate cert {trusted_cert.get_subject()} \n",'DEBUG')
             ROOT_STORE.add_cert(trusted_cert)
 
     # and verify the the chain of trust
@@ -212,7 +214,7 @@ if __name__ == "__main__":
     parser.add_argument('--domain', required=False)
     args = parser.parse_args()
 
-    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG, format='%(message)s')
+    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='%(message)s')
 
     if os.getenv('SHODAN_API', None):
         SHODAN_API=os.environ['SHODAN_API']
