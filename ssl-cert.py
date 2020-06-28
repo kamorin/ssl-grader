@@ -4,12 +4,27 @@ from pprint import pprint
 import pickle
 from OpenSSL import crypto
 from datetime import datetime
+import certifi
 
 # crypto is a bit harder to work with vs. OpenSSL, but has more functionality.
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.x509.oid import NameOID, ExtensionOID
 from cryptography.x509.general_name import DNSName
+
+
+def load_ca_root():
+    ''' load CAs trusted root '''
+    store = crypto.X509Store()
+    try:
+        with open(certifi.where(), 'rb') as f:
+            cacert = crypto.load_certificate(crypto.FILETYPE_PEM, f.read())
+            store.add_cert(cacert)
+            pprint(cacert.get_subject())
+            pprint(cacert.get_serial_number())
+    except EnvironmentError: # parent of IOError, OSError *and* WindowsError where available
+        print(f'No CA Store found at {certifi.where()}, can not validate')
+    return store
 
 
 def extract_x509_info_via_crypto(chain):
@@ -34,24 +49,38 @@ def extract_x509_info(chain):
         if 'subjectAltName' in str(ext.get_short_name()):
             san = ext.__str__().replace('DNS', '').replace(':', '').split(', ')
     
-    if len(chain)>2:
-        pprint(chain)
-        verify_chain_of_trust(chain[0],(chain[1],chain[2]))
+    print("test={}".format(len(chain)))
+    #pprint(chain)
+    if len(chain)>1:
+        #pprint(chain)
+        verify_chain_of_trust(chain[0], chain[1:])
         sys.exit(1)
     return san
 
 
 def verify_chain_of_trust(cert_pem, trusted_cert_pems):
     '''  openssl manual validation of chain '''
+    
+    print("length of trusted = {}".format(len(trusted_cert_pems)))
+    print(trusted_cert_pems)
+    print("type={}".format(type(trusted_cert_pems)))
+    #pprint(f"trusted crt {len(trusted_cert_pems)}")
+
     print("starting validation!!!!\n\n\n")
     certificate = crypto.load_certificate(crypto.FILETYPE_PEM, cert_pem)
+    pprint(certificate.get_subject())
     print("loaded client!!!!\n\n\n")
+
     # Create and fill a X509Sore with trusted certs
-    store = crypto.X509Store()
-    for trusted_cert_pem in trusted_cert_pems:
+    store = load_ca_root()
+
+    for trusted_cert_pem in trusted_cert_pems[::-1]:
         #pprint(trusted_cert_pem)
         trusted_cert = crypto.load_certificate(crypto.FILETYPE_PEM, trusted_cert_pem)
-        pprint(trusted_cert.get_subject())
+        print(f"{trusted_cert.get_subject()} \n{trusted_cert.get_issuer()} \n {trusted_cert.get_notAfter()}")
+        #trusted_cert.get_issuer()
+        #get_notAfter()
+
         store.add_cert(trusted_cert)
         print("adding trusted_certs!!!\n\n\n")
     # Create a X590StoreContext with the cert and trusted certs
@@ -59,7 +88,13 @@ def verify_chain_of_trust(cert_pem, trusted_cert_pems):
     store_ctx = crypto.X509StoreContext(store, certificate)
 
     # Returns None if certificate can be validated
-    result = store_ctx.verify_certificate()
+    result=None
+    try:
+        result = store_ctx.verify_certificate()
+    except Exception as e:
+        print('exception occurred, value:', e)
+        result=False
+
     if result is None:
         return True
     else:
@@ -148,12 +183,14 @@ for service in results['matches']:
                  'sig_alg' : service['ssl']['cert']['sig_alg'],
                  'cipher'  : service['ssl']['cipher'],
                  'version' : service['ssl']['versions'],
-                 'dhparams'  : service['ssl']['dhparams'],
+                 'dhparams': service['ssl'].get('dhparams',{'bits':float('inf'),'fingerprint':''}),
                  'issued'  : datetime.strptime(service['ssl']['cert']['issued'], "%Y%m%d%H%M%SZ"),
                 }
+    print("\n\n\n\n")
+    pprint(certinfo)
+
     certinfo['altnames']=extract_x509_info(service['ssl']['chain'])
     cert_list.append(certinfo)
-
 
 #grade_ssl(cert_list)
 #pprint(cert_list)
