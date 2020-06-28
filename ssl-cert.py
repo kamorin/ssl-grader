@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 """SSL Grader"""
-
 __author__      = "Kevin Amorin"
 __copyright__   = "Copyright 2020"
 __license__ = "GPL"
@@ -19,7 +18,6 @@ import pem
 import logging
 import argparse
 
-
 ROOT_STORE=None
 
 def log(s,type='DEBUG'):
@@ -27,7 +25,6 @@ def log(s,type='DEBUG'):
         if type in 'DEBUG':
             logging.debug(line)
         else:
-            print(s)
             logging.info(line)
     logging.debug("\n")
 
@@ -40,6 +37,9 @@ class gradedCert(object):
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+    def __repr__(self):
+        return pformat(self.__dict__)
 
     def grade_cert(self):
         ''' process cert attributes, add to list of issues and update grade
@@ -93,7 +93,7 @@ def load_ca_root():
             for cert in certs:
                 cacert = crypto.load_certificate(crypto.FILETYPE_PEM, cert.as_text())
                 store.add_cert(cacert)
-                log(f"loading root CA store w/ {cacert.get_subject()} ")
+                #log(f"loading root CA store w/ {cacert.get_subject()} ")
     except EnvironmentError: # parent of IOError, OSError *and* WindowsError where available
         print(f'No CA Store found at {certifi.where()}, can not validate')
     return store
@@ -194,15 +194,15 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
                     'issued'  : datetime.strptime(service['ssl']['cert']['issued'], "%Y%m%d%H%M%SZ"),
                     }
         mycert=gradedCert(**certinfo)
-        log(certinfo)
+        log(mycert)
+        #mycert.issues()
 
-
+        sys.exit(1)
         certinfo['altnames']=extract_x509_info(service['ssl']['chain'])
         cert_list.append(certinfo)
-
+        
     #grade_ssl(cert_list)
     #pprint(cert_list)
-
 
 
 if __name__ == "__main__":
