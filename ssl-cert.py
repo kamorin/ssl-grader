@@ -192,9 +192,8 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
 if __name__ == "__main__":
     #logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
     parser = argparse.ArgumentParser(prog='ssl-cert.py',description='ssl-cert grader')
-    parser.add_argument('domain', action="store")
+    parser.add_argument('--domain', required=False)
     args = parser.parse_args()
-    pprint(args)
 
     logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
@@ -207,9 +206,10 @@ if __name__ == "__main__":
     # load root store    
     ROOT_STORE=load_ca_root()
 
-    #domain="amazon.com"
-    #domain="wpi.edu"
-    query="ssl.cert.subject.cn:"+args.domain
+    domain="wpi.edu"
+    if args.domain:
+        domain=args.domain
+    query="ssl.cert.subject.cn:"+domain
     TESTING_LOCAL=True
 
     search(SHODAN_API, query, TESTING_LOCAL)
