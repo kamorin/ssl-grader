@@ -87,7 +87,7 @@ class graderCert(object):
         ''' process cert attributes, add to list of issues and update grade
         '''
         if self.sig_alg != 'sha256WithRSAEncryption':
-            self.issues.append(f"WARNING signature algorith weak {self.sig_alg}")
+            self.issues.append(f"Signature algorithm weak {self.sig_alg}")
             self.grade-=10
             
         # dhparams': {'bits': 4096,
@@ -98,24 +98,24 @@ class graderCert(object):
                 or 'CBC' in self.cipher['name']  \
                 or 'RC4' in self.cipher['name']  \
                 or 'TLS-RSA' in self.cipher['name']:
-            self.issues.append(f"WARNING bad cipher {self.cipher}")
-            self.issues.append('Since Cipher Block Chaining (CBC) ciphers were marked as weak (around March 2019) many, many sites now show a bunch of weak ciphers enabled and some are even exploitable via Zombie Poodle and Goldendoodle')   
+            self.issues.append(f"Bad cipher {self.cipher['name']}")
+            #self.issues.append('Since Cipher Block Chaining (CBC) ciphers were marked as weak (around March 2019) many, many sites now show a bunch of weak ciphers enabled and some are even exploitable via Zombie Poodle and Goldendoodle')   
             self.grade-=10
 
         if self.pubkey['bits'] < 2048:
-            self.issues.append(f"WARNING bits={self.pubkey['bits']}")
+            self.issues.append(f"Bits {self.pubkey['bits']} <2048")
             self.grade-=10
             
         if self.expired:
-            self.issues.append(f"WARNING EXPIRED CERT {self.expires}")
+            self.issues.append(f"EXPIRED CERT {self.expires}")
             self.grade-=10
             
         if 'SSLv3' in self.cipher['version']:
-            self.issues.append("WARNING SSLv3 SUPPORTED")
+            self.issues.append("SSLv3 SUPPORTED")
             self.grade-=10
 
         if 'TLSv1' in self.cipher['version']:
-            self.issues.append("WARNING TLSv1 SUPPORTED")
+            self.issues.append("TLSv1 SUPPORTED")
             self.grade-=10
 
         self.verify_chain_of_trust()
@@ -221,7 +221,6 @@ if __name__ == "__main__":
     parser.add_argument('-l', required=False, dest="LOCAL_CACHE", action='store_true',  help="used cache to generate report")
     args = parser.parse_args()
     
-    print(args)
     CSVOUTPUT=args.CSVOUTPUT
     TESTING_LOCAL=args.LOCAL_CACHE
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='%(message)s')
@@ -231,11 +230,11 @@ if __name__ == "__main__":
     query="ssl.cert.subject.cn:"+domain
 
     if args.api_key:
-        SHODAN_API=args.shodan
+        SHODAN_API=args.api_key
     elif os.getenv('SHODAN_API', None):
         SHODAN_API=os.environ['SHODAN_API']
     else:
-        log("Set SHODAN_API ENV",'ERROR')
+        log("SHODAN_API Key missing.  Pass as argument or set SHODAN_API env var",'ERROR')
         sys.exit(1)
 
     # load root store    
