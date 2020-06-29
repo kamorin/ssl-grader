@@ -26,16 +26,18 @@ For other Linux flavors, macOS and Windows, packages are available at
 Quick start
 -----------
 
-If you want to run the latest version of the code, you can install from git:
+If you want to run the latest version of the code, you can install from github:
 
-    $ python3 -m pip install -U git+git://github.com/kamorin/ssl-grader.git
+    $ curl -L https://github.com/kamorin/ssl-grader/archive/master.zip -o ssl-grader.zip
+    $ unzip ssl-grader.zip -d ssl-grader
+    $ cd ssl-grader
+    $ pip3 install -r requirements.txt
 
-    $ pip3 install -r test-requirements.txt
-
-
-example: python3 ssl-cert.py wpi.edu
-
+syntax: 
     $ python3 ssl-cert.py [domain to search]  [SHDOAN_API]
+
+example:
+    $ python3 ssl-cert.py wpi.edu  XXXYYYYKKKKZZZZZZZZZ
 
 
 License
