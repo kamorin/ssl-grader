@@ -215,12 +215,24 @@ if __name__ == "__main__":
     '''  parse args, set global API Keys and execute search function
     '''
     parser = argparse.ArgumentParser(prog='ssl-cert.py',description='ssl-cert grader')
-    parser.add_argument('--domain', required=False)
+    parser.add_argument('domain', help="subdomain to search for certificates")
+    parser.add_argument('-a', required=False, dest="api_key", help="Shodan API key")
+    parser.add_argument('-c', required=False, dest="CSVOUTPUT", action='store_true', default=False,  help="output report to a CSV file")
+    parser.add_argument('-l', required=False, dest="LOCAL_CACHE", action='store_true',  help="used cache to generate report")
     args = parser.parse_args()
-
+    
+    print(args)
+    CSVOUTPUT=args.CSVOUTPUT
+    TESTING_LOCAL=args.LOCAL_CACHE
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='%(message)s')
+    
+    if args.domain:
+        domain=args.domain
+    query="ssl.cert.subject.cn:"+domain
 
-    if os.getenv('SHODAN_API', None):
+    if args.api_key:
+        SHODAN_API=args.shodan
+    elif os.getenv('SHODAN_API', None):
         SHODAN_API=os.environ['SHODAN_API']
     else:
         log("Set SHODAN_API ENV",'ERROR')
@@ -229,31 +241,25 @@ if __name__ == "__main__":
     # load root store    
     ROOT_STORE=load_root_ca_list()
 
-    domain="wpi.edu"
-    if args.domain:
-        domain=args.domain
-    query="ssl.cert.subject.cn:"+domain
-    TESTING_LOCAL=True
-
     results=search_shodan(SHODAN_API, query, TESTING_LOCAL)
     certs=load_shodan(results)
 
     # TODO: search_censys(), load_censys()
     
+    # print report
     table = BeautifulTable(max_width=140)
-    table.column_headers = ["Subject", "Grade", "Issues"]
+    table.column_headers = ["Subject", "AltNames","Grade", "Issues"]
     table.set_style(BeautifulTable.STYLE_MYSQL)
     for cert in certs:
-        table.append_row([cert.subject,cert.grade,cert.issues])
-    
+        table.append_row([cert.subject,cert.altnames[:10],cert.grade,cert.issues])
     table.sort('Grade')
     print(table)
     
-    CVSOUTPUT=False
-    if CVSOUTPUT:
-        with open("{domain}.csv", 'w', newline='') as csvfile:
-            certwriter = csv.writer(csvfile, delimiter=' ', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-            certwriter.writerow("Subject", "Grade", "Issues")
+    # optional CSV output
+    if CSVOUTPUT:
+        with open(domain+".csv", 'w', newline='') as csvfile:
+            certwriter = csv.writer(csvfile)
+            certwriter.writerow(["Subject", "Grade", "Issues"])
             for cert in certs:
-                certwriter.writerow(cert.subject,cert.grade,cert.issues)
+                certwriter.writerow([cert.subject,cert.grade,cert.issues])
 
