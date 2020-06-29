@@ -18,21 +18,16 @@ import pem
 import logging
 import argparse
 
-# add to different obj?
 ROOT_STORE=None
 
-def log(info,type='INFO'):
-    '''  TODO: update to handle types better
-    '''
+def log(s,type='INFO'):
+    # log wrapper
     levels = {'DEBUG':10,
               'INFO':20,
               'WARNING':30,
               'ERROR':40,
               'CRITICAL':50 }
-    #if isinstance(info,str):
-    #    info=pformat(info.splitlines())
-    for line in info:
-        logging.log(levels[type],info)
+    logging.log(levels[type],s)
 
 
 def extract_altname(server_crt):
