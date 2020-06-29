@@ -247,8 +247,6 @@ if __name__ == "__main__":
         table.append_row([cert.subject,cert.grade,cert.issues])
     
     table.sort('Grade')
-    #x.sortby = "Grade"
-    #x.reversesort = True
     print(table)
     
     CVSOUTPUT=False
