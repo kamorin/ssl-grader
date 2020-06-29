@@ -240,20 +240,9 @@ if __name__ == "__main__":
 
     # TODO: search_censys(), load_censys()
     
-    # i=0
-    # for cert in certs:
-    #     cert.grade_cert()
-    #     #log(f"cert is grade: {cert.grade} with issues: {cert.issues}\n",'WARN')
-    #     i+=1
-    #     if i==4:
-    #         break 
-
     table = BeautifulTable(max_width=140)
     table.column_headers = ["Subject", "Grade", "Issues"]
-    #table.append_row([colored("John", 'red'), 4, colored("boy", 'blue')])
-    #table.set_style(BeautifulTable.STYLE_MYSQL)
-    table.set_style(BeautifulTable.STYLE_MARKDOWN)
-    #x.align["Issues"] = "l"
+    table.set_style(BeautifulTable.STYLE_MYSQL)
     for cert in certs:
         table.append_row([cert.subject,cert.grade,cert.issues])
     
