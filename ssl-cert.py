@@ -67,7 +67,7 @@ def load_root_ca_list():
     return store
 
 
-class gradedCert(object):
+class graderCert(object):
     '''  
     '''
     grade=100
@@ -116,26 +116,27 @@ class gradedCert(object):
             self.issues.append("WARNING TLSv1 SUPPORTED")
             self.grade-=10
 
+        self.verify_chain_of_trust()
+        if self.validation:
+            self.issues.append("FAILED CHAIN OF TRUST VALIDATION")
+            self.grade-=20
+
 
     def verify_chain_of_trust(self):
-        '''  openssl manual validation of chain 
+        '''  openssl manual validation of chain.  store validation result in self.validation 
             
-            :param cert_pem: server cert in PEM UTF-8 string format
-            :type cert_pem: str
-            :param trusted_cert_pem: list of intermediate certs in PEM UTF-8 string format
-            :type trusted_cert_pem: list of str
-            :return: return true if chain is verified
-            :rtype: bool
+            :param server_cert: server cert in PEM UTF-8 string format
+            :type server_cert: str
+            :param trusted_chain: list of intermediate certs in PEM UTF-8 string format
+            :type trusted_chain: list of str
         '''
-        log(f"\n\n\nVERIFYING CHAIN OF TRUST ")
-
         certificate = crypto.load_certificate(crypto.FILETYPE_PEM, self.server_cert)
-        log(f"loaded server certification {certificate.get_subject()}",'DEBUG')
+        log(f"loaded server certification {certificate.get_subject().CN}",'INFO')
         
         if self.trust_chain:
             for trusted_cert_pem in self.trust_chain:
                 trusted_cert = crypto.load_certificate(crypto.FILETYPE_PEM, trusted_cert_pem)
-                log(f"added intermediate cert {trusted_cert.get_subject()} \n",'DEBUG')
+                log(f"added intermediate cert {trusted_cert.get_subject()}",'DEBUG')
                 ROOT_STORE.add_cert(trusted_cert)
 
         # and verify the the chain of trust
@@ -145,18 +146,20 @@ class gradedCert(object):
         try:
             result = store_ctx.verify_certificate()
         except Exception as e:
-            print('exception occurred, value:', e)
-            result=False
-
+            print('Validation Failed: ', e)
+            self.validation=False
+            
         if result is None:
-            log("Validated",'INFO')
-            return True
+            log("Validated")
+            self.validation=True
         else:
-            return False
+            self.validation=False
 
 
-def search(SHODAN_API, query, TESTING_LOCAL=False):
-    '''  call Shodan API and process results
+
+
+def search_shodan(SHODAN_API, query, TESTING_LOCAL=False):
+    '''  call Shodan API and return results
     '''
     api = Shodan(SHODAN_API)
     if TESTING_LOCAL:
@@ -171,8 +174,13 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
     else:
         log(f"**Querying Shodan with Search query {query}\n",'INFO')
         results=api.search(query)
+    
+    return results
 
-    graded_certs=[]
+def load_shodan(results):
+    ''' load shodan results into a list of 
+    '''
+    certs=[]
     for service in results['matches']:
         certinfo = { 'ip' : service['ip_str'],
                     'hostname' : service['hostnames'],
@@ -192,23 +200,12 @@ def search(SHODAN_API, query, TESTING_LOCAL=False):
         certinfo['trust_chain']=None
         if len(service['ssl']['chain'])>1:
             certinfo['trust_chain']=service['ssl']['chain'][1:]
-
-        cert=gradedCert(**certinfo)
-        # load cert chain
-
-        cert.verify_chain_of_trust()
         
-        sys.exit(1)
-        pprint(service)
+        # load dictionary into initializer 
+        certs.append(graderCert(**certinfo))
+    
+    return certs
 
-        # grade
-        cert.grade_cert()
-        print(f" \n\n\nthe cert is graded: {cert.grade} with issues: {cert.issues}")
-        
-        graded_certs.append(cert)
-                
-    #grade_ssl(cert_list)
-    #pprint(cert_list)
 
 
 if __name__ == "__main__":
@@ -218,7 +215,7 @@ if __name__ == "__main__":
     parser.add_argument('--domain', required=False)
     args = parser.parse_args()
 
-    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG, format='%(message)s')
+    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='%(message)s')
 
     if os.getenv('SHODAN_API', None):
         SHODAN_API=os.environ['SHODAN_API']
@@ -235,4 +232,11 @@ if __name__ == "__main__":
     query="ssl.cert.subject.cn:"+domain
     TESTING_LOCAL=True
 
-    search(SHODAN_API, query, TESTING_LOCAL)
+    results=search_shodan(SHODAN_API, query, TESTING_LOCAL)
+    certs=load_shodan(results)
+
+    for cert in certs:
+        cert.grade_cert()
+        print(f" \n\n\nthe cert is graded: {cert.grade} with issues: {cert.issues}")
+        
+    
