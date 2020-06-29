@@ -4,8 +4,8 @@
 """SSL Grader"""
 __author__      = "Kevin Amorin"
 __copyright__   = "Copyright 2020"
-__license__ = "GPL"
-__version__ = "1.0.1"
+__license__     = "GPL"
+__version__     = "1.0.1"
 
 import sys,os
 from shodan import Shodan
@@ -17,11 +17,13 @@ import certifi
 import pem
 import logging
 import argparse
+from beautifultable import BeautifulTable
+import csv
 
 ROOT_STORE=None
 
-def log(s,type='INFO'):
-    # log wrapper
+def log(s,type='DEBUG'):
+    """ log wrapper """
     levels = {'DEBUG':10,
               'INFO':20,
               'WARNING':30,
@@ -60,9 +62,9 @@ def load_root_ca_list():
             for cert in certs:
                 cacert = crypto.load_certificate(crypto.FILETYPE_PEM, cert.as_text())
                 store.add_cert(cacert)
-                log(f"loading root CA store w/ {cacert.get_subject()} ",'DEBUG')
+                log(f"loading root CA store w/ {cacert.get_subject()} ")
     except EnvironmentError: # parent of IOError, OSError *and* WindowsError where available
-        print(f'No CA Store found at {certifi.where()}, can not validate\n\n')
+        log(f'No CA Store found at {certifi.where()}, can not validate\n\n','ERROR')
         raise FileNotFoundError
     return store
 
@@ -117,8 +119,8 @@ class graderCert(object):
             self.grade-=10
 
         self.verify_chain_of_trust()
-        if self.validation:
-            self.issues.append("FAILED CHAIN OF TRUST VALIDATION")
+        if not self.validation:
+            self.issues.append("FAILED CHAIN OF TRUST VALIDATION: "+self.validation_reason)
             self.grade-=20
 
 
@@ -131,30 +133,28 @@ class graderCert(object):
             :type trusted_chain: list of str
         '''
         certificate = crypto.load_certificate(crypto.FILETYPE_PEM, self.server_cert)
-        log(f"loaded server certification {certificate.get_subject().CN}",'INFO')
+        log(f"loaded server cert: {certificate.get_subject().CN}",'INFO')
         
         if self.trust_chain:
             for trusted_cert_pem in self.trust_chain:
                 trusted_cert = crypto.load_certificate(crypto.FILETYPE_PEM, trusted_cert_pem)
-                log(f"added intermediate cert {trusted_cert.get_subject()}",'DEBUG')
+                log(f"added intermediate cert {trusted_cert.get_subject()}")
                 ROOT_STORE.add_cert(trusted_cert)
 
         # and verify the the chain of trust
         store_ctx = crypto.X509StoreContext(ROOT_STORE, certificate)
-        # Returns None if certificate can be validated
-        result=None
+        # Rasies exception if certificate is not valid
         try:
-            result = store_ctx.verify_certificate()
+            store_ctx.verify_certificate()
         except Exception as e:
-            print('Validation Failed: ', e)
+            log(f"Validation Failed: {e.args[0][2]}")
             self.validation=False
+            self.validation_reason=e.args[0][2]
+            return
             
-        if result is None:
-            log("Validated")
-            self.validation=True
-        else:
-            self.validation=False
-
+        log("Validation Successful")
+        self.validation=True
+        self.validation_reason=None
 
 
 
@@ -164,7 +164,7 @@ def search_shodan(SHODAN_API, query, TESTING_LOCAL=False):
     api = Shodan(SHODAN_API)
     if TESTING_LOCAL:
         try:
-            log(f"***LOCAL TESTING ENABLED**\nReading cached data from results.pkl\n",'INFO')
+            log(f"***LOCAL TESTING ENABLED**\n***NOT CALLING SHODAN***\nReading cached data from results.pkl\n",'INFO')
             with open("results.pkl","rb") as f:
                 results=pickle.load(f)
         except IOError:
@@ -176,6 +176,7 @@ def search_shodan(SHODAN_API, query, TESTING_LOCAL=False):
         results=api.search(query)
     
     return results
+
 
 def load_shodan(results):
     ''' load shodan results into a list of 
@@ -202,7 +203,9 @@ def load_shodan(results):
             certinfo['trust_chain']=service['ssl']['chain'][1:]
         
         # load dictionary into initializer 
-        certs.append(graderCert(**certinfo))
+        cert=graderCert(**certinfo)
+        cert.grade_cert()
+        certs.append(cert)
     
     return certs
 
@@ -220,7 +223,7 @@ if __name__ == "__main__":
     if os.getenv('SHODAN_API', None):
         SHODAN_API=os.environ['SHODAN_API']
     else:
-        print("Set SHODAN_API ENV")
+        log("Set SHODAN_API ENV",'ERROR')
         sys.exit(1)
 
     # load root store    
@@ -235,8 +238,35 @@ if __name__ == "__main__":
     results=search_shodan(SHODAN_API, query, TESTING_LOCAL)
     certs=load_shodan(results)
 
-    for cert in certs:
-        cert.grade_cert()
-        print(f" \n\n\nthe cert is graded: {cert.grade} with issues: {cert.issues}")
-        
+    # TODO: search_censys(), load_censys()
     
+    # i=0
+    # for cert in certs:
+    #     cert.grade_cert()
+    #     #log(f"cert is grade: {cert.grade} with issues: {cert.issues}\n",'WARN')
+    #     i+=1
+    #     if i==4:
+    #         break 
+
+    table = BeautifulTable(max_width=140)
+    table.column_headers = ["Subject", "Grade", "Issues"]
+    #table.append_row([colored("John", 'red'), 4, colored("boy", 'blue')])
+    #table.set_style(BeautifulTable.STYLE_MYSQL)
+    table.set_style(BeautifulTable.STYLE_MARKDOWN)
+    #x.align["Issues"] = "l"
+    for cert in certs:
+        table.append_row([cert.subject,cert.grade,cert.issues])
+    
+    table.sort('Grade')
+    #x.sortby = "Grade"
+    #x.reversesort = True
+    print(table)
+    
+    CVSOUTPUT=False
+    if CVSOUTPUT:
+        with open("{domain}.csv", 'w', newline='') as csvfile:
+            certwriter = csv.writer(csvfile, delimiter=' ', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            certwriter.writerow("Subject", "Grade", "Issues")
+            for cert in certs:
+                certwriter.writerow(cert.subject,cert.grade,cert.issues)
+
