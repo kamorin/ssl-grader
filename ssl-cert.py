@@ -21,21 +21,19 @@ import argparse
 # add to different obj?
 ROOT_STORE=None
 
-def log(s,type='INFO'):
+def log(info,type='INFO'):
     '''  TODO: update to handle types better
     '''
-    if isinstance(s,str):
-        lines=pformat(s.splitlines()).splitlines()
-    else:
-        lines=pformat(s).splitlines()
-    for line in lines:
-        if type in 'DEBUG':
-            logging.debug(line)
-            logging.debug("\n")
-        elif type in 'INFO':
-            logging.info(line)
-        elif type in 'WARN':
-            logging.warn(line)
+    levels = {'DEBUG':10,
+              'INFO':20,
+              'WARNING':30,
+              'ERROR':40,
+              'CRITICAL':50 }
+    #if isinstance(info,str):
+    #    info=pformat(info.splitlines())
+    for line in info:
+        logging.log(levels[type],info)
+
 
 def extract_altname(server_crt):
     ''' Helper: parse PEM formated certificate chain list for v3 extention alt-names
@@ -225,7 +223,7 @@ if __name__ == "__main__":
     parser.add_argument('--domain', required=False)
     args = parser.parse_args()
 
-    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='%(message)s')
+    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG, format='%(message)s')
 
     if os.getenv('SHODAN_API', None):
         SHODAN_API=os.environ['SHODAN_API']
