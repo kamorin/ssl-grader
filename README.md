@@ -37,7 +37,7 @@ usage:
 
     $ python3 ssl-cert.py [-h] [-a API_KEY] [-c] [-l] domain
 
-example search all certs in the domain amorin.org
+example search all certs in the subdomain ccis.neu.edu
 
     $ python3 ssl-cert.py ccis.neu.edu -a XXXYYYSHODANAPIKEYZZZZZ
 
