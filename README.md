@@ -33,12 +33,18 @@ If you want to run the latest version of the code, you can install from github:
     $ cd ssl-grader
     $ pip3 install -r requirements.txt
 
-syntax: 
-    $ python3 ssl-cert.py [domain to search]  [SHDOAN_API]
+usage: 
 
-example:
-    $ python3 ssl-cert.py wpi.edu  XXXYYYYKKKKZZZZZZZZZ
+    $ python3 ssl-cert.py [-h] [-a API_KEY] [-c] [-l] domain
 
+example search all certs in the domain amorin.org
+
+    $ python3 ssl-cert.py ccis.neu.edu -a XXXYYYSHODANAPIKEYZZZZZ
+
+
+example:  search all certs in the domain wpi.edu and output to a CSV file
+
+    $ python3 ssl-cert.py wpi.edu -a XXXYYYSHODANAPIKEYZZZZZ -c 
 
 License
 -------
