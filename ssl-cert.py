@@ -105,20 +105,20 @@ class graderCert(object):
             self.grade-=10
             
         if self.expired:
-            self.issues.append(f"EXPIRED CERT {self.expires}")
+            self.issues.append(f"Expired Cert {self.expires}")
             self.grade-=10
             
         if 'SSLv3' in self.cipher['version']:
-            self.issues.append("SSLv3 SUPPORTED")
+            self.issues.append("SSLv3 supported")
             self.grade-=10
 
         if 'TLSv1' in self.cipher['version']:
-            self.issues.append("TLSv1 SUPPORTED")
+            self.issues.append("TLSv1 supported")
             self.grade-=10
 
         self.verify_chain_of_trust()
         if not self.validation:
-            self.issues.append("FAILED CHAIN OF TRUST VALIDATION: "+self.validation_reason)
+            self.issues.append("Failed Chain of Trust validation : "+self.validation_reason)
             self.grade-=20
 
 
@@ -225,6 +225,7 @@ class shodanSearch(object):
             #load shodan results and convert it to a dict we can grade
             certs.append(self.load(result))
 
+
             counter += 1
             if counter >= limit:
                break
@@ -268,6 +269,7 @@ class shodanSearch(object):
 if __name__ == "__main__":
     '''  parse args, set global API Keys and execute search function
     '''
+    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='%(message)s')
     parser = argparse.ArgumentParser(prog='ssl-cert.py',description='ssl-cert grader')
     parser.add_argument('domain', help="subdomain to search for certificates")
     parser.add_argument('-a', required=False, dest="api_key", help="Shodan API key")
@@ -280,10 +282,10 @@ if __name__ == "__main__":
     csv_output=args.csv_output
     use_cache=args.use_cache
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='%(message)s')
+
     
     if args.domain:
         domain=args.domain
-    query="ssl.cert.subject.cn:"+domain
 
     # load root store    
     ROOT_STORE=load_root_ca_list()
@@ -292,6 +294,7 @@ if __name__ == "__main__":
     mysearch = certSearch('SHODAN', args.api_key, args.result_limit)
     mysearch.search(domain, use_cache)
     pprint(mysearch.get_results())
+
     
     for certinfo in mysearch.get_results():
         cert=graderCert(**certinfo)
@@ -303,7 +306,7 @@ if __name__ == "__main__":
     table.column_headers = ["Subject", "AltNames","Grade", "Issues"]
     table.set_style(BeautifulTable.STYLE_MYSQL)
     for cert in certs:
-        table.append_row([cert.subject,cert.altnames[:10],cert.grade,cert.issues])
+        table.append_row([cert.subject,cert.altnames[:100],cert.grade,cert.issues])
     table.sort('Grade')
     print(table)
     
