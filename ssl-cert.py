@@ -206,10 +206,10 @@ class shodanSearch(object):
             try:
                 log(f"-LOCAL REPORT GENERATION\n-NOT CALLING SHODAN\n-Reading cached data from {domain}.pkl\n",'INFO')
                 with open(f"{domain}.pkl","rb") as f:
-                    certs=pickle.load(f)
+                    self.results=pickle.load(f)
                     return
-            except IOError:
-                log("-Cache file not accessible, regening file",'INFO')
+            except IOError as e:
+                log(f"-Cache file not accessible, regening file {e}",'INFO')
         
         api = Shodan(self.SHODAN_API)
         query="ssl.cert.subject.cn:"+domain
@@ -218,10 +218,11 @@ class shodanSearch(object):
         counter = 0
         certs=[]
         for result in api.search_cursor(query):
-            print(f"RESULT c={counter} \n")
-
+            print(f"RESULT count={counter} \n")
             # html large result, del now and save space
             result.pop('html', None)
+            
+            #load shodan results and convert it to a dict we can grade
             certs.append(self.load(result))
 
             counter += 1
@@ -229,7 +230,7 @@ class shodanSearch(object):
                break
 
         if use_cache:
-            pickle.dump(results,open(f"{query}.pkl","wb"))
+            pickle.dump(certs,open(f"{domain}.pkl","wb"))
 
         self.results=certs
 
@@ -272,7 +273,7 @@ if __name__ == "__main__":
     parser.add_argument('-a', required=False, dest="api_key", help="Shodan API key")
     parser.add_argument('-c', required=False, dest="csv_output", action='store_true', default=False,  help="output report to a CSV file")
     parser.add_argument('-l', required=False, dest="result_limit", type=int, default=100, action='store',  help="limit result set to save on API credits")
-    parser.add_argument('-t', required=False, dest="use_cache", action='store_true', default=False, help="used cache to generate report")
+    parser.add_argument('-u', required=False, dest="use_cache", action='store_true', default=False, help="used cache to generate report")
     args = parser.parse_args()
     
     pprint(args)
@@ -291,6 +292,11 @@ if __name__ == "__main__":
     mysearch = certSearch('SHODAN', args.api_key, args.result_limit)
     mysearch.search(domain, use_cache)
     pprint(mysearch.get_results())
+    
+    for certinfo in mysearch.get_results():
+        cert=graderCert(**certinfo)
+        cert.grade_cert()
+        certs.append(cert)
 
     # print report
     table = BeautifulTable(max_width=140)
