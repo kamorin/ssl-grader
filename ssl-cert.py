@@ -107,20 +107,20 @@ class graderCert(object):
             self.grade-=10
             
         if self.expired:
-            self.issues.append(f"EXPIRED CERT {self.expires}")
+            self.issues.append(f"Expired Cert {self.expires}")
             self.grade-=10
             
         if 'SSLv3' in self.cipher['version']:
-            self.issues.append("SSLv3 SUPPORTED")
+            self.issues.append("SSLv3 supported")
             self.grade-=10
 
         if 'TLSv1' in self.cipher['version']:
-            self.issues.append("TLSv1 SUPPORTED")
+            self.issues.append("TLSv1 supported")
             self.grade-=10
 
         self.verify_chain_of_trust()
         if not self.validation:
-            self.issues.append("FAILED CHAIN OF TRUST VALIDATION: "+self.validation_reason)
+            self.issues.append("Failed Chain of Trust validation : "+self.validation_reason)
             self.grade-=20
 
 
@@ -158,23 +158,36 @@ class graderCert(object):
 
 
 
-def search_shodan(SHODAN_API, query, TESTING_LOCAL=False):
+def search_shodan(SHODAN_API, domain, result_limit, TESTING_LOCAL=False):
     '''  call Shodan API and return results
     '''
-    api = Shodan(SHODAN_API)
+    query="ssl.cert.subject.cn:"+domain
     if TESTING_LOCAL:
         try:
             log(f"***LOCAL TESTING ENABLED**\n***NOT CALLING SHODAN***\nReading cached data from results.pkl\n",'INFO')
-            with open("results.pkl","rb") as f:
+            with open(f"{domain}.pkl","rb") as f:
                 results=pickle.load(f)
         except IOError:
             log("**Cache file not accessible, regening file",'INFO')
             results=api.search(query)
-            pickle.dump(results,open("results.pkl","wb"))
+            pickle.dump(results,open(f"{domain}.pkl","wb"))
     else:
-        log(f"**Querying Shodan with Search query {query}\n",'INFO')
-        results=api.search(query)
+        log(f"**Querying Shodan with Search query {domain}\n",'INFO')
+   
+        limit = result_limit
+        counter = 0
+        results={}
+        for result in api.search_cursor(query):
+            #results(result)
+            print(result)
+
+            counter += 1
+            if counter >= limit:
+                break
+            sys.exit(1)
     
+
+
     return results
 
 
@@ -214,20 +227,22 @@ def load_shodan(results):
 if __name__ == "__main__":
     '''  parse args, set global API Keys and execute search function
     '''
+    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='%(message)s')
     parser = argparse.ArgumentParser(prog='ssl-cert.py',description='ssl-cert grader')
     parser.add_argument('domain', help="subdomain to search for certificates")
     parser.add_argument('-a', required=False, dest="api_key", help="Shodan API key")
     parser.add_argument('-c', required=False, dest="CSVOUTPUT", action='store_true', default=False,  help="output report to a CSV file")
-    parser.add_argument('-l', required=False, dest="LOCAL_CACHE", action='store_true',  help="used cache to generate report")
+    parser.add_argument('-l', required=False, dest="result_limit", action='store', type=int, default=100, help="max results to return.  Shodan sets 100 results per credit. Default=100")
+    parser.add_argument('-r', required=False, dest="LOCAL_CACHE", action='store_true',  help="generate report from cache.  if cache is not available generate & save cache")
+
     args = parser.parse_args()
     
     CSVOUTPUT=args.CSVOUTPUT
     TESTING_LOCAL=args.LOCAL_CACHE
-    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='%(message)s')
+    result_limit=args.result_limit
     
     if args.domain:
         domain=args.domain
-    query="ssl.cert.subject.cn:"+domain
 
     if args.api_key:
         SHODAN_API=args.api_key
@@ -240,7 +255,7 @@ if __name__ == "__main__":
     # load root store    
     ROOT_STORE=load_root_ca_list()
 
-    results=search_shodan(SHODAN_API, query, TESTING_LOCAL)
+    results=search_shodan(SHODAN_API, domain, result_limit, TESTING_LOCAL)
     certs=load_shodan(results)
 
     # TODO: search_censys(), load_censys()
@@ -250,7 +265,7 @@ if __name__ == "__main__":
     table.column_headers = ["Subject", "AltNames","Grade", "Issues"]
     table.set_style(BeautifulTable.STYLE_MYSQL)
     for cert in certs:
-        table.append_row([cert.subject,cert.altnames[:10],cert.grade,cert.issues])
+        table.append_row([cert.subject,cert.altnames[:100],cert.grade,cert.issues])
     table.sort('Grade')
     print(table)
     
