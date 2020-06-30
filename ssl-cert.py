@@ -218,13 +218,11 @@ class shodanSearch(object):
         counter = 0
         certs=[]
         for result in api.search_cursor(query):
-            print(f"RESULT count={counter} \n")
             # html large result, del now and save space
             result.pop('html', None)
             
             #load shodan results and convert it to a dict we can grade
             certs.append(self.load(result))
-
 
             counter += 1
             if counter >= limit:
@@ -257,10 +255,6 @@ class shodanSearch(object):
         certinfo['trust_chain']=None
         if len(result['ssl']['chain'])>1:
             certinfo['trust_chain']=result['ssl']['chain'][1:]
-        
-        # # load dictionary into initializer 
-        # cert=graderCert(**certinfo)
-        # cert.grade_cert()
 
         return certinfo
 
@@ -278,7 +272,7 @@ if __name__ == "__main__":
     parser.add_argument('-u', required=False, dest="use_cache", action='store_true', default=False, help="used cache to generate report")
     args = parser.parse_args()
     
-    pprint(args)
+    log(args,'INFO')
     csv_output=args.csv_output
     use_cache=args.use_cache
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='%(message)s')
@@ -293,8 +287,6 @@ if __name__ == "__main__":
     certs=[]
     mysearch = certSearch('SHODAN', args.api_key, args.result_limit)
     mysearch.search(domain, use_cache)
-    pprint(mysearch.get_results())
-
     
     for certinfo in mysearch.get_results():
         cert=graderCert(**certinfo)
