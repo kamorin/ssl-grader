@@ -157,71 +157,106 @@ class graderCert(object):
         self.validation_reason=None
 
 
-
-
-
-def search_shodan(SHODAN_API, domain, result_limit, TESTING_LOCAL=False):
-    '''  call Shodan API and return results
-    '''    
-    if TESTING_LOCAL:
-        try:
-            log(f"-LOCAL REPORT GENERATION\n-NOT CALLING SHODAN\n-Reading cached data from {domain}.pkl\n",'INFO')
-            with open(f"{domain}.pkl","rb") as f:
-                results=pickle.load(f)
-                return
-        except IOError:
-            log("-Cache file not accessible, regening file",'INFO')
-    
-    api = Shodan(SHODAN_API)
-    query="ssl.cert.subject.cn:"+domain
-    log(f"**Querying Shodan with Search query {query}\n",'INFO')
-    limit = result_limit
-    counter = 0
-    certs=[]
-    for result in api.search_cursor(query):
-        print(f"RESULT c={counter} \n")
-
-        # html large result, del now and save space
-        result.pop('html', None)
-        certs.append(load_shodan(result))
-
-        counter += 1
-        #if counter >= limit:
-        #   break
-
-    if TESTING_LOCAL:
-        pickle.dump(results,open(f"{query}.pkl","wb"))
-
-    return certs
-
-
-def load_shodan(result):
-    ''' load shodan results into a list of 
+class certSearch(object):
+    ''' facade search obj
     '''
-    certinfo = { 'ip' : result['ip_str'],
-                'hostname' : result['hostnames'],
-                'isp' : result['isp'],
-                'subject' : result['ssl']['cert']['subject']['CN'],
-                'expired' : result['ssl']['cert']['expired'],
-                'expires' : result['ssl']['cert']['expires'],
-                'pubkey'  : result['ssl']['cert']['pubkey'],
-                'sig_alg' : result['ssl']['cert']['sig_alg'],
-                'cipher'  : result['ssl']['cipher'],
-                'version' : result['ssl']['versions'],
-                'dhparams': result['ssl'].get('dhparams',{'bits':float('inf'),'fingerprint':''}),
-                'issued'  : datetime.strptime(result['ssl']['cert']['issued'], "%Y%m%d%H%M%SZ"),
-                'altnames': extract_altname(result['ssl']['chain'][0]),
-                }
-    certinfo['server_cert']=result['ssl']['chain'][0]
-    certinfo['trust_chain']=None
-    if len(result['ssl']['chain'])>1:
-        certinfo['trust_chain']=result['ssl']['chain'][1:]
-    
-    # load dictionary into initializer 
-    cert=graderCert(**certinfo)
-    cert.grade_cert()
+    def __init___(self, search_engine="SHODAN", api_key=None,result_limit=100):
+        if search_engine == "SHODAN":
+            self.searchAPI=shodanSearch(api_key,result_limit)
+        else:
+            self.searchAPI=censysSearch(api_key,result_limit)
 
-    return cert
+    def load():
+        self.searchAPI.load()
+    
+    def search(domain,TESTING_LOCAL):
+        self.searchAPI.search()
+
+
+class censysSearch(object):
+    ''' TODO: censys '''
+    def __init___(self,api_key=None,result_limit=100):
+        pass
+    def load():
+        pass
+    def search():
+        pass
+
+
+class shodanSearch(object):
+    '''
+    '''
+    def __init__(self, api_key=None, result_limit=100):
+        if api_key:
+            self.SHODAN_API=api_key
+        elif os.getenv('SHODAN_API', None):
+            self.SHODAN_API=os.environ['SHODAN_API']
+        else:
+            log("SHODAN_API Key missing.  Pass as argument or set SHODAN_API env var",'ERROR')
+            sys.exit(1)
+        
+    def search(domain, TESTING_LOCAL=False):
+        '''  call Shodan API and return results
+        '''    
+        if TESTING_LOCAL:
+            try:
+                log(f"-LOCAL REPORT GENERATION\n-NOT CALLING SHODAN\n-Reading cached data from {domain}.pkl\n",'INFO')
+                with open(f"{domain}.pkl","rb") as f:
+                    certs=pickle.load(f)
+                    return
+            except IOError:
+                log("-Cache file not accessible, regening file",'INFO')
+        
+        api = Shodan(SHODAN_API)
+        query="ssl.cert.subject.cn:"+domain
+        log(f"**Querying Shodan with Search query {query}\n",'INFO')
+        limit = result_limit
+        counter = 0
+        certs=[]
+        for result in api.search_cursor(query):
+            print(f"RESULT c={counter} \n")
+
+            # html large result, del now and save space
+            result.pop('html', None)
+            certs.append(load_shodan(result))
+
+            counter += 1
+            #if counter >= limit:
+            #   break
+
+        if TESTING_LOCAL:
+            pickle.dump(results,open(f"{query}.pkl","wb"))
+
+        return certs
+
+
+    def load(result):
+        ''' load shodan results into a list of 
+        '''
+        certinfo = { 'ip' : result['ip_str'],
+                    'hostname' : result['hostnames'],
+                    'isp' : result['isp'],
+                    'subject' : result['ssl']['cert']['subject']['CN'],
+                    'expired' : result['ssl']['cert']['expired'],
+                    'expires' : result['ssl']['cert']['expires'],
+                    'pubkey'  : result['ssl']['cert']['pubkey'],
+                    'sig_alg' : result['ssl']['cert']['sig_alg'],
+                    'cipher'  : result['ssl']['cipher'],
+                    'version' : result['ssl']['versions'],
+                    'dhparams': result['ssl'].get('dhparams',{'bits':float('inf'),'fingerprint':''}),
+                    'issued'  : datetime.strptime(result['ssl']['cert']['issued'], "%Y%m%d%H%M%SZ"),
+                    'altnames': extract_altname(result['ssl']['chain'][0]),
+                    }
+        certinfo['server_cert']=result['ssl']['chain'][0]
+        certinfo['trust_chain']=None
+        if len(result['ssl']['chain'])>1:
+            certinfo['trust_chain']=result['ssl']['chain'][1:]
+        
+        # load dictionary into initializer 
+        cert=graderCert(**certinfo)
+        cert.grade_cert()
+
+        return cert
 
 
 
@@ -232,7 +267,8 @@ if __name__ == "__main__":
     parser.add_argument('domain', help="subdomain to search for certificates")
     parser.add_argument('-a', required=False, dest="api_key", help="Shodan API key")
     parser.add_argument('-c', required=False, dest="CSVOUTPUT", action='store_true', default=False,  help="output report to a CSV file")
-    parser.add_argument('-l', required=False, dest="LOCAL_CACHE", action='store_true',  help="used cache to generate report")
+    parser.add_argument('-l', required=False, dest="limit_result", default=100, action='store',  help="limit result set to save on API credits")
+    parser.add_argument('-t', required=False, dest="LOCAL_CACHE", action='store_true',  help="used cache to generate report")
     args = parser.parse_args()
     
     CSVOUTPUT=args.CSVOUTPUT
@@ -243,20 +279,12 @@ if __name__ == "__main__":
         domain=args.domain
     query="ssl.cert.subject.cn:"+domain
 
-    if args.api_key:
-        SHODAN_API=args.api_key
-    elif os.getenv('SHODAN_API', None):
-        SHODAN_API=os.environ['SHODAN_API']
-    else:
-        log("SHODAN_API Key missing.  Pass as argument or set SHODAN_API env var",'ERROR')
-        sys.exit(1)
-
     # load root store    
     ROOT_STORE=load_root_ca_list()
 
-    certs=search_shodan(SHODAN_API, query, TESTING_LOCAL)
-
-    # TODO: search_censys() & load_censys()
+    mysearch = certSearch('SHODAN', args.api_key,)
+    mysearch.search(domain,TESTING_LOCAL)
+    certs=mysearch.load()
     
     # print report
     table = BeautifulTable(max_width=140)
