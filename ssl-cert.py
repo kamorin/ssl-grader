@@ -31,7 +31,6 @@ def log(s,type='DEBUG'):
               'CRITICAL':50 }
     logging.log(levels[type],s)
 
-
 def extract_altname(server_crt):
     ''' Helper: parse PEM formated certificate chain list for v3 extention alt-names
 
@@ -67,7 +66,6 @@ def load_root_ca_list():
         log(f'No CA Store found at {certifi.where()}, can not validate\n\n','ERROR')
         raise FileNotFoundError
     return store
-
 
 class graderCert(object):
     '''  
@@ -156,21 +154,23 @@ class graderCert(object):
         self.validation=True
         self.validation_reason=None
 
-
 class certSearch(object):
     ''' facade search obj
     '''
-    def __init___(self, search_engine="SHODAN", api_key=None,result_limit=100):
+    def __init__(self, search_engine, api_key, result_limit):
         if search_engine == "SHODAN":
             self.searchAPI=shodanSearch(api_key,result_limit)
         else:
             self.searchAPI=censysSearch(api_key,result_limit)
-
-    def load():
-        self.searchAPI.load()
     
-    def search(domain,TESTING_LOCAL):
-        self.searchAPI.search()
+    def load(self,result):
+        self.searchAPI.load(result)
+    
+    def search(self,domain,load_cache):
+        self.searchAPI.search(domain,load_cache)
+
+    def get_results(self):
+        return self.searchAPI.results
 
 
 class censysSearch(object):
@@ -187,6 +187,7 @@ class shodanSearch(object):
     '''
     '''
     def __init__(self, api_key=None, result_limit=100):
+        self.result_limit=result_limit
         if api_key:
             self.SHODAN_API=api_key
         elif os.getenv('SHODAN_API', None):
@@ -194,11 +195,14 @@ class shodanSearch(object):
         else:
             log("SHODAN_API Key missing.  Pass as argument or set SHODAN_API env var",'ERROR')
             sys.exit(1)
-        
-    def search(domain, TESTING_LOCAL=False):
+
+    def get_results():
+        return self.results
+
+    def search(self, domain, use_cache=False):
         '''  call Shodan API and return results
         '''    
-        if TESTING_LOCAL:
+        if use_cache:
             try:
                 log(f"-LOCAL REPORT GENERATION\n-NOT CALLING SHODAN\n-Reading cached data from {domain}.pkl\n",'INFO')
                 with open(f"{domain}.pkl","rb") as f:
@@ -207,10 +211,10 @@ class shodanSearch(object):
             except IOError:
                 log("-Cache file not accessible, regening file",'INFO')
         
-        api = Shodan(SHODAN_API)
+        api = Shodan(self.SHODAN_API)
         query="ssl.cert.subject.cn:"+domain
         log(f"**Querying Shodan with Search query {query}\n",'INFO')
-        limit = result_limit
+        limit = self.result_limit
         counter = 0
         certs=[]
         for result in api.search_cursor(query):
@@ -218,19 +222,19 @@ class shodanSearch(object):
 
             # html large result, del now and save space
             result.pop('html', None)
-            certs.append(load_shodan(result))
+            certs.append(self.load(result))
 
             counter += 1
-            #if counter >= limit:
-            #   break
+            if counter >= limit:
+               break
 
-        if TESTING_LOCAL:
+        if use_cache:
             pickle.dump(results,open(f"{query}.pkl","wb"))
 
-        return certs
+        self.results=certs
 
 
-    def load(result):
+    def load(self, result):
         ''' load shodan results into a list of 
         '''
         certinfo = { 'ip' : result['ip_str'],
@@ -252,11 +256,11 @@ class shodanSearch(object):
         if len(result['ssl']['chain'])>1:
             certinfo['trust_chain']=result['ssl']['chain'][1:]
         
-        # load dictionary into initializer 
-        cert=graderCert(**certinfo)
-        cert.grade_cert()
+        # # load dictionary into initializer 
+        # cert=graderCert(**certinfo)
+        # cert.grade_cert()
 
-        return cert
+        return certinfo
 
 
 
@@ -266,13 +270,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='ssl-cert.py',description='ssl-cert grader')
     parser.add_argument('domain', help="subdomain to search for certificates")
     parser.add_argument('-a', required=False, dest="api_key", help="Shodan API key")
-    parser.add_argument('-c', required=False, dest="CSVOUTPUT", action='store_true', default=False,  help="output report to a CSV file")
-    parser.add_argument('-l', required=False, dest="limit_result", default=100, action='store',  help="limit result set to save on API credits")
-    parser.add_argument('-t', required=False, dest="LOCAL_CACHE", action='store_true',  help="used cache to generate report")
+    parser.add_argument('-c', required=False, dest="csv_output", action='store_true', default=False,  help="output report to a CSV file")
+    parser.add_argument('-l', required=False, dest="result_limit", type=int, default=100, action='store',  help="limit result set to save on API credits")
+    parser.add_argument('-t', required=False, dest="use_cache", action='store_true', default=False, help="used cache to generate report")
     args = parser.parse_args()
     
-    CSVOUTPUT=args.CSVOUTPUT
-    TESTING_LOCAL=args.LOCAL_CACHE
+    pprint(args)
+    csv_output=args.csv_output
+    use_cache=args.use_cache
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format='%(message)s')
     
     if args.domain:
@@ -282,10 +287,11 @@ if __name__ == "__main__":
     # load root store    
     ROOT_STORE=load_root_ca_list()
 
-    mysearch = certSearch('SHODAN', args.api_key,)
-    mysearch.search(domain,TESTING_LOCAL)
-    certs=mysearch.load()
-    
+    certs=[]
+    mysearch = certSearch('SHODAN', args.api_key, args.result_limit)
+    mysearch.search(domain, use_cache)
+    pprint(mysearch.get_results())
+
     # print report
     table = BeautifulTable(max_width=140)
     table.column_headers = ["Subject", "AltNames","Grade", "Issues"]
@@ -296,7 +302,7 @@ if __name__ == "__main__":
     print(table)
     
     # optional CSV output
-    if CSVOUTPUT:
+    if csv_output:
         with open(domain+".csv", 'w', newline='') as csvfile:
             certwriter = csv.writer(csvfile)
             certwriter.writerow(["Subject", "Grade", "Issues"])
