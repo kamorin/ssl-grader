@@ -35,16 +35,19 @@ If you want to run the latest version of the code, you can install from github:
 
 usage: 
 
-    $ python3 ssl-cert.py [-h] [-a API_KEY] [-c] [-l] domain
+    $ python3 ssl-cert.py [-h] [-a API_KEY] [-c] [-l RESULT_LIMIT] [-u] domain
 
 example search all certs in the subdomain ccis.neu.edu
 
     $ python3 ssl-cert.py ccis.neu.edu -a XXXYYYSHODANAPIKEYZZZZZ
 
-
 example:  search all certs in the domain wpi.edu and output to a CSV file
 
-    $ python3 ssl-cert.py wpi.edu -a XXXYYYSHODANAPIKEYZZZZZ -c 
+    $ python3 ssl-cert.py wpi.edu -c -a XXXYYYSHODANAPIKEYZZZZZ
+
+example:  search all certs in the domain wpi.edu and set result limit to 1000, default is 100
+
+    $ python3 ssl-cert.py wpi.edu -l 1000 -a XXXYYYSHODANAPIKEYZZZZZ
 
 License
 -------
