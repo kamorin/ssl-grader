@@ -158,56 +158,70 @@ class graderCert(object):
 
 
 
-def search_shodan(SHODAN_API, query, TESTING_LOCAL=False):
+
+
+def search_shodan(SHODAN_API, domain, result_limit, TESTING_LOCAL=False):
     '''  call Shodan API and return results
-    '''
-    api = Shodan(SHODAN_API)
+    '''    
     if TESTING_LOCAL:
         try:
-            log(f"***LOCAL TESTING ENABLED**\n***NOT CALLING SHODAN***\nReading cached data from results.pkl\n",'INFO')
-            with open("results.pkl","rb") as f:
+            log(f"-LOCAL REPORT GENERATION\n-NOT CALLING SHODAN\n-Reading cached data from {domain}.pkl\n",'INFO')
+            with open(f"{domain}.pkl","rb") as f:
                 results=pickle.load(f)
+                return
         except IOError:
-            log("**Cache file not accessible, regening file",'INFO')
-            results=api.search(query)
-            pickle.dump(results,open("results.pkl","wb"))
-    else:
-        log(f"**Querying Shodan with Search query {query}\n",'INFO')
-        results=api.search(query)
+            log("-Cache file not accessible, regening file",'INFO')
     
-    return results
+    api = Shodan(SHODAN_API)
+    query="ssl.cert.subject.cn:"+domain
+    log(f"**Querying Shodan with Search query {query}\n",'INFO')
+    limit = result_limit
+    counter = 0
+    certs=[]
+    for result in api.search_cursor(query):
+        print(f"RESULT c={counter} \n")
+
+        # html large result, del now and save space
+        result.pop('html', None)
+        certs.append(load_shodan(result))
+
+        counter += 1
+        #if counter >= limit:
+        #   break
+
+    if TESTING_LOCAL:
+        pickle.dump(results,open(f"{query}.pkl","wb"))
+
+    return certs
 
 
-def load_shodan(results):
+def load_shodan(result):
     ''' load shodan results into a list of 
     '''
-    certs=[]
-    for service in results['matches']:
-        certinfo = { 'ip' : service['ip_str'],
-                    'hostname' : service['hostnames'],
-                    'isp' : service['isp'],
-                    'subject' : service['ssl']['cert']['subject']['CN'],
-                    'expired' : service['ssl']['cert']['expired'],
-                    'expires' : service['ssl']['cert']['expires'],
-                    'pubkey'  : service['ssl']['cert']['pubkey'],
-                    'sig_alg' : service['ssl']['cert']['sig_alg'],
-                    'cipher'  : service['ssl']['cipher'],
-                    'version' : service['ssl']['versions'],
-                    'dhparams': service['ssl'].get('dhparams',{'bits':float('inf'),'fingerprint':''}),
-                    'issued'  : datetime.strptime(service['ssl']['cert']['issued'], "%Y%m%d%H%M%SZ"),
-                    'altnames': extract_altname(service['ssl']['chain'][0]),
-                    }
-        certinfo['server_cert']=service['ssl']['chain'][0]
-        certinfo['trust_chain']=None
-        if len(service['ssl']['chain'])>1:
-            certinfo['trust_chain']=service['ssl']['chain'][1:]
-        
-        # load dictionary into initializer 
-        cert=graderCert(**certinfo)
-        cert.grade_cert()
-        certs.append(cert)
+    certinfo = { 'ip' : result['ip_str'],
+                'hostname' : result['hostnames'],
+                'isp' : result['isp'],
+                'subject' : result['ssl']['cert']['subject']['CN'],
+                'expired' : result['ssl']['cert']['expired'],
+                'expires' : result['ssl']['cert']['expires'],
+                'pubkey'  : result['ssl']['cert']['pubkey'],
+                'sig_alg' : result['ssl']['cert']['sig_alg'],
+                'cipher'  : result['ssl']['cipher'],
+                'version' : result['ssl']['versions'],
+                'dhparams': result['ssl'].get('dhparams',{'bits':float('inf'),'fingerprint':''}),
+                'issued'  : datetime.strptime(result['ssl']['cert']['issued'], "%Y%m%d%H%M%SZ"),
+                'altnames': extract_altname(result['ssl']['chain'][0]),
+                }
+    certinfo['server_cert']=result['ssl']['chain'][0]
+    certinfo['trust_chain']=None
+    if len(result['ssl']['chain'])>1:
+        certinfo['trust_chain']=result['ssl']['chain'][1:]
     
-    return certs
+    # load dictionary into initializer 
+    cert=graderCert(**certinfo)
+    cert.grade_cert()
+
+    return cert
 
 
 
@@ -240,10 +254,9 @@ if __name__ == "__main__":
     # load root store    
     ROOT_STORE=load_root_ca_list()
 
-    results=search_shodan(SHODAN_API, query, TESTING_LOCAL)
-    certs=load_shodan(results)
+    certs=search_shodan(SHODAN_API, query, TESTING_LOCAL)
 
-    # TODO: search_censys(), load_censys()
+    # TODO: search_censys() & load_censys()
     
     # print report
     table = BeautifulTable(max_width=140)
