@@ -55,7 +55,10 @@ def load_root_ca_list():
     '''
     store = None
     try:
-        with open(certifi.where(), 'rb') as f:
+        # Mac shipps with 175 root CA certs vs. 139 from pyOpenssl.  In my testing, the 175s vs. 139 
+        # didn't result in increase in validation count across 10k certs.  However your mileage may vary
+        # reaplce apple-system-root.pem w/ certifi.where() to use openssl cert store
+        with open("apple-system-root.pem", 'rb') as f:
             certs=pem.parse(f.read())
             store = crypto.X509Store()
             for cert in certs:
