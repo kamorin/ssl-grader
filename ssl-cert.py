@@ -17,7 +17,7 @@ import certifi
 import pem
 import logging
 import argparse
-from beautifultable import BeautifulTable
+from prettytable import PrettyTable
 import csv
 
 ROOT_STORE=None
@@ -184,7 +184,7 @@ class censysSearch(object):
 
 
 class shodanSearch(object):
-    '''
+    ''' call the shodan search api and 
     '''
     def __init__(self, api_key=None, result_limit=100):
         self.result_limit=result_limit
@@ -200,8 +200,9 @@ class shodanSearch(object):
         return self.results
 
     def search(self, domain, use_cache=False):
-        '''  call Shodan API and return results
-        '''    
+        '''  call Shodan API and format the results in a dict for later grading
+             formated search results stored in shodan.results as list of dicts
+        '''  
         if use_cache:
             try:
                 log(f"-LOCAL REPORT GENERATION\n-NOT CALLING SHODAN\n-Reading cached data from {domain}.pkl\n",'INFO')
@@ -235,7 +236,7 @@ class shodanSearch(object):
 
 
     def load(self, result):
-        ''' load shodan results into a list of 
+        ''' take shodan result dict and convert it to a dict for use in grading
         '''
         certinfo = { 'ip' : result['ip_str'],
                     'hostname' : result['hostnames'],
@@ -294,19 +295,20 @@ if __name__ == "__main__":
         certs.append(cert)
 
     # print report
-    table = BeautifulTable(max_width=140)
-    table.column_headers = ["Subject", "AltNames","Grade", "Issues"]
-    table.set_style(BeautifulTable.STYLE_MYSQL)
+    table = PrettyTable()
+    table.field_names = ["Hostname","Subject", "AltNames","Grade", "Issues"]    
+    table._max_width = {"Hostname" : 30, "Subject" : 30, "AltNames":30, "Grade":5,"Issues":50}
     for cert in certs:
-        table.append_row([cert.subject,cert.altnames[:100],cert.grade,cert.issues])
-    table.sort('Grade')
+        table.add_row([', '.join(cert.hostname),cert.subject,
+                        ', '.join(cert.altnames)+"\n\n",cert.grade,', '.join(cert.issues)+"\n\n" ])
+    table.sortby='Grade'
     print(table)
     
     # optional CSV output
     if csv_output:
         with open(domain+".csv", 'w', newline='') as csvfile:
-            certwriter = csv.writer(csvfile)
-            certwriter.writerow(["Subject", "Grade", "Issues"])
+            certwriter = csv.writer(csvfile,quotechar='"')
+            certwriter.writerow(["Hostname","Subject", "AltNames", "Grade", "Issues"])
             for cert in certs:
-                certwriter.writerow([cert.subject,cert.grade,cert.issues])
-
+                certwriter.writerow([', '.join(cert.hostname),cert.subject,
+                        ', '.join(cert.altnames),cert.grade,', '.join(cert.issues) ])
