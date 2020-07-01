@@ -95,9 +95,13 @@ class graderCert(object):
         # dhparams': {'bits': 4096,
         # ECDHE enable forward secrecy with modern web browsers
 
-        if "RSA" not in self.cipher["name"] or "ADH" in self.cipher["name"] or "CBC" in self.cipher["name"] or "RC4" in self.cipher["name"] or "TLS-RSA" in self.cipher["name"]:
+        if "RSA" not in self.cipher["name"] or 
+           "ADH" in self.cipher["name"] or 
+           "CBC" in self.cipher["name"] or 
+           "RC4" in self.cipher["name"] or 
+           "TLS-RSA" in self.cipher["name"]:
             self.issues.append(f"Bad cipher {self.cipher['name']}")
-            # self.issues.append('Since Cipher Block Chaining (CBC) ciphers were marked as weak (around March 2019) many, many sites now show a bunch of weak ciphers enabled and some are even exploitable via Zombie Poodle and Goldendoodle')
+            # Cipher Block Chaining (CBC) ciphers were marked as weak (around March 2019)
             self.grade -= 10
 
         if self.pubkey["bits"] < 2048:
