@@ -178,22 +178,110 @@ class certSearch(object):
 
 
 class censysSearch(object):
-    """ TODO: censys """
+    """ censys obj """
+    RESULT_FIELDS = ['443','11211','143','1433','161','25','3306','3389','465','5432','5672','631','6379','6443','8883','ip','993','995']
+    SEARCH_FIELDS = [ 
+                    '443.https.tls.certificate.parsed.names',
+                    '11211.memcached.banner.tls.certificate.parsed.names',
+                    '143.imap.starttls.tls.certificate.parsed.names',
+                    '1433.mssql.banner.tls.certificate.parsed.names',
+                    '161.snmp.banner.tls.certificate.parsed.names',
+                    '1883.mqtt.banner.tls.certificate.parsed.names',
+                    '25.smtp.starttls.tls.certificate.parsed.names',
+                    '3306.mysql.banner.tls.certificate.parsed.names',
+                    '3389.rdp.banner.tls.certificate.parsed.names',
+                    '465.smtp.tls.tls.certificate.parsed.names',
+                    '5432.postgres.banner.tls.certificate.parsed.names',
+                    '5672.amqp.banner.tls.certificate.parsed.names',
+                    '631.ipp.banner.tls.certificate.parsed.names',
+                    '6379.redis.banner.tls.certificate.parsed.names',
+                    '6443.kubernetes.banner.tls.certificate.parsed.names',
+                    '8883.mqtt.banner.tls.certificate.parsed.names',
+                    '9200.elasticsearch.banner.tls.certificate.parsed.names',
+                    '993.imaps.tls.tls.certificate.parsed.names',
+                    '995.pop3s.tls.tls.certificate.parsed.names',
+                    ]
 
     def __init___(self, api_key=None, result_limit=100):
-        pass
+        # parse SEARCHFIELDs and create a dict pointing to TLS 
+        self.search_key={}
+        for item in self.SEARCH_FIELDS:
+            terms=item.split('.')
+            self.search_key[terms[0]]=terms[:-3]
 
-    def load():
-        pass
+        self.result_limit = result_limit
+        if api_key:
+            self.SHODAN_API = api_key
+        elif os.getenv("CENSYS_API", None):
+            self.SHODAN_API = os.environ["CENSYS_API"]
+        else:
+            log("CENSYS_API Key missing.  Pass as argument or set SHODAN_API env var", "ERROR")
+            sys.exit(1)
 
-    def search():
+    def load(self,result):
+        certinfo = {}
+        tls = {}
+
+        for port in result:
+            if self.search_key.get(port,None):
+                print(f"processing : port{port} {self.search_key[port]}")    # search key  443 -> {key path}
+                tls=result
+                for path in self.search_key[port]:
+                    # iterate down dictionary until TLS certificate node reached
+                    if tls.get(path,None):
+                        tls=tls[path]
+                    else:
+                        print(f"ERROR in DATA!! {self.search_key[port]}")
+
+                if not tls.get('certificate',None):
+                    print(f"port {port} missing TLS cert")
+                    break
+        
+                pprint(result[port])
+                print("\n\n")
+                certinfo = {
+                    'ip' : result['ip'],
+                    'altnames' : tls['certificate']['parsed']['names'],
+                    'server_cert' : None,
+                    'trust_chain' : None,
+                    'expires' : tls['certificate']['parsed']['validity']['end'],
+                    'version' : tls['version'],
+                    'cipher' :  {'name' : tls['cipher_suite']['name'],
+                                'version' : tls['version'],
+                                },
+                    'pubkey' :  {'bits' : tls['certificate']['parsed']['subject_key_info']['rsa_public_key']['length'],
+                                    'type' : tls['certificate']['parsed']['subject_key_info']['key_algorithm']['name'],
+                                },
+                    'sig_alg' :  tls['certificate']['parsed']['signature_algorithm']['name'],
+                    'subject' :  (tls['certificate']['parsed']['subject']).get('common_name',None),
+                    'issued' :  tls['certificate']['parsed']['validity']['start'],
+                    'validation' : tls['validation']['browser_trusted'],
+                    'validation_reason' : tls['validation']['browser_trusted'],
+                }
+                try:
+                    certinfo['dhparams']=result['443']['https']['dhe']['dh_params']['prime']['length']
+                except KeyError:
+                    certinfo['dhparams']=None
+
+                try:
+                    certinfo['heartbleed_enabled']=result['443']['https']['heartbeat_enabled']
+                except KeyError:
+                    certinfo['heartbleed_enabled']=None
+                
+                if (datetime.strptime(tls['certificate']['parsed']['validity']['end'], "%Y-%m-%dT%H:%M:%SZ") < datetime.today()):
+                    certinfo['expired']=True
+                else:
+                    certinfo['expired']=False
+
+        return certinfo
+
+    def search(self):
         pass
 
 
 class shodanSearch(object):
-    """ call the shodan search api and 
+    """ shodan search api
     """
-
     def __init__(self, api_key=None, result_limit=100):
         self.result_limit = result_limit
         if api_key:
@@ -204,31 +292,44 @@ class shodanSearch(object):
             log("SHODAN_API Key missing.  Pass as argument or set SHODAN_API env var", "ERROR")
             sys.exit(1)
 
-    def get_results():
+    def get_results(self):
         return self.results
 
+    def get_raw_results(self):
+        return self.raw_results
+
     def search(self, domain, use_cache=False):
-        """  call Shodan API and format the results in a dict for later grading
-             formated search results stored in shodan.results as list of dicts
+        """  call Shodan API and save result list to self.raw_results
         """
+        self.raw_results=[]
+        #load cache of raw search results
         if use_cache:
             try:
                 log(f"-LOCAL REPORT GENERATION\n-NOT CALLING SHODAN\n-Reading cached data from {domain}.pkl\n", "INFO")
                 with open(f"{domain}.pkl", "rb") as f:
-                    self.results = pickle.load(f)
-                    return
-            except IOError as e:
-                log(f"-Cache file not accessible, regening file {e}", "INFO")
+                    self.raw_results = pickle.load(f)
+            except IOError:
+                log(f"-Cache file not accessible for {domain}", "INFO")
 
-        api = Shodan(self.SHODAN_API)
-        query = "ssl.cert.subject.cn:" + domain
-        log(f"**Querying Shodan with Search query {query}\n", "INFO")
+        if not self.raw_results:
+            api = Shodan(self.SHODAN_API)
+            query = "ssl.cert.subject.cn:" + domain
+            log(f"**Querying Shodan with Search query {query}\n", "INFO")
+            self.raw_results=list(api.search_cursor(query))
+
+        if use_cache:
+            pickle.dump(self.raw_results, open(f"{domain}.pkl", "wb"))
+    
+        self.load_raw_results()
+        
+            
+    def load_raw_results(self):
+        '''  load shodan results from self.raw_results into common format dict self.results
+        '''
         limit = self.result_limit
         counter = 0
         certs = []
-        for result in api.search_cursor(query):
-            pprint(result)
-            sys.exit(1)
+        for result in self.raw_results:
             # html large result, del now and save space
             result.pop("html", None)
 
@@ -239,10 +340,8 @@ class shodanSearch(object):
             if counter >= limit:
                 break
 
-        if use_cache:
-            pickle.dump(certs, open(f"{domain}.pkl", "wb"))
-
         self.results = certs
+
 
     def load(self, result):
         """ take shodan result dict and convert it to a dict for use in grading
@@ -276,8 +375,9 @@ if __name__ == "__main__":
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(prog="ssl-cert.py", description="ssl-cert grader")
     parser.add_argument("domain", help="subdomain to search for certificates")
-    parser.add_argument("-a", required=False, dest="api_key", help="Shodan API key")
-    parser.add_argument("-c", required=False, dest="csv_output", action="store_true", default=False, help="output report to a CSV file")
+    parser.add_argument("-s", required=False, dest="api_key_shodan", help="Shodan API key")
+    parser.add_argument("-c", required=False, dest="api_key_censys", help="Censys API key")
+    parser.add_argument("-o", required=False, dest="csv_output", action="store_true", default=False, help="output report to a CSV file")
     parser.add_argument("-l", required=False, dest="result_limit", type=int, default=100, action="store", help="limit result set to save on API credits")
     parser.add_argument("-u", required=False, dest="use_cache", action="store_true", default=False, help="used cache to generate report")
     args = parser.parse_args()
@@ -294,7 +394,8 @@ if __name__ == "__main__":
     ROOT_STORE = load_root_ca_list()
 
     certs = []
-    mysearch = certSearch("SHODAN", args.api_key, args.result_limit)
+    mysearch = certSearch("SHODAN", args.api_key_shodan, args.result_limit)
+    #mysearch = certSearch("CENSYS", args.api_key_censys, args.result_limit)
     mysearch.search(domain, use_cache)
 
     for certinfo in mysearch.get_results():
