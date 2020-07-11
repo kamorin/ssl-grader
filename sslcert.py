@@ -176,6 +176,8 @@ class certSearch(object):
     def get_results(self):
         return self.searchAPI.results
 
+    def get_raw_results(self):
+        return self.searchAPI.raw_results
 
 class censysSearch(object):
     """ censys obj """
@@ -315,7 +317,9 @@ class shodanSearch(object):
             api = Shodan(self.SHODAN_API)
             query = "ssl.cert.subject.cn:" + domain
             log(f"**Querying Shodan with Search query {query}\n", "INFO")
-            self.raw_results=list(api.search_cursor(query))
+            mylist=list(api.search_cursor(query))
+            #self.raw_results=list(api.search_cursor(query))
+            self.raw_results=mylist[0]
 
         if use_cache:
             pickle.dump(self.raw_results, open(f"{domain}.pkl", "wb"))
@@ -335,7 +339,6 @@ class shodanSearch(object):
 
             # load shodan results and convert it to a dict we can grade
             certs.append(self.load(result))
-
             counter += 1
             if counter >= limit:
                 break
