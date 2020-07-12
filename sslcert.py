@@ -164,6 +164,7 @@ class certSearch(object):
     """
     
     def __init__(self, search_engine, result_limit, api_id, api_secret=None):
+        self.search_engine = search_engine
         if search_engine == "SHODAN":
             self.searchAPI = shodanSearch(result_limit, api_id)
         else:
@@ -183,8 +184,8 @@ class certSearch(object):
         self.raw_results=[]
         #load cache of raw search results
         if use_cache:
-            self.load_cache(domain)
-        else:
+            self.load_cache(domain)        
+        if not self.raw_results:
             self.searchAPI.search(domain)
             self.save_cache(domain)
         self.load_raw_results()
@@ -199,13 +200,13 @@ class certSearch(object):
         ''' load raw search results into raw_results from pickled file'''
         try:
             log(f"-Reading cached data from {filename}.pkl\n", "INFO")
-            with open(f"{filename}.pkl", "rb") as f:
+            with open(f"{filename}-{self.search_engine}.pkl", "rb") as f:
                 self.searchAPI.raw_results = pickle.load(f)
         except IOError:
             log(f"-Cache file not accessible for {filename}", "INFO")
 
-    def save_cache(self,filename=None):
-        pickle.dump(self.searchAPI.raw_results, open(f"{filename}.pkl", "wb"))
+    def save_cache(self, filename=None):
+        pickle.dump(self.searchAPI.raw_results, open(f"{filename}-{self.search_engine}.pkl", "wb"))
   
 class censysSearch(object):
     """ censys obj """
@@ -313,11 +314,10 @@ class censysSearch(object):
         query = ' '.join([ '{0}:"{1}"'.format(x, domain) for x in self.SEARCH_FIELDS ])
         log(f"**Querying Censys with search query {query}\n", "INFO")
 
-        censys_cert= censys.ipv4.CensysIPv4(api_id=censys_id,api_secret=censys_secret)
+        censys_cert= censys.ipv4.CensysIPv4(api_id=self.CENSYS_API_ID,api_secret=self.CENSYS_API_SECRET)
         try:
             api = censys_cert.search(query, self.RESULT_FIELDS, flatten=False)
-            self.raw_results = list(api.search_cursor(query))
-            pickle.dump(list(api), open(f"{domain}-censys.pkl", "wb"))
+            self.raw_results = list(api)
         except censys.base.CensysUnauthorizedException:
             sys.stderr.write('[+] Censys account details wrong. \n')
             exit(1)
@@ -415,8 +415,8 @@ if __name__ == "__main__":
     ROOT_STORE = load_root_ca_list()
 
     certs = []
-    mysearch = certSearch("SHODAN", args.result_limit, args.api_key_shodan, )
-    #mysearch = certSearch("CENSYS", args.result_limit, args.api_key_censys_id, args.api_key_censys_secret)
+    #mysearch = certSearch("SHODAN", args.result_limit, args.api_key_shodan, )
+    mysearch = certSearch("CENSYS", args.result_limit, args.api_key_censys_id, args.api_key_censys_secret)
     mysearch.search(domain, use_cache)
 
     for certinfo in mysearch.get_results():
