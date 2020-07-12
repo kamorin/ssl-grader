@@ -9,11 +9,13 @@ Unit tests for :ssl-cert.py
 """
 domain="wpi.edu"
 
-class TestStringMethods(unittest.TestCase):
+class TestGraderMethods(unittest.TestCase):
     def test_shodan_load_https_subject(self):
         mysearch = certSearch("SHODAN", "TESTING134", 1)
-        mysearch.search(domain, True)
-        raw_results = mysearch.get_raw_results()[0]
+        # load cache manually
+        mysearch.load_cache(f"{domain}-test")
+        mysearch.search(domain, False)
+        raw_results = mysearch.get_raw_results()
         cert = {
             'altnames': ['*.echo360.wpi.edu'],
             'cipher': {'bits': 128,
@@ -59,8 +61,7 @@ class TestStringMethods(unittest.TestCase):
             'validation_reason': True,
             'version': 'TLSv1.2'
         }
-        #mysearch = certSearch("CENSYS", "TESTING134", "1")
-        #mysearch.search(domain, use_cache=True)
+
 
 
 
