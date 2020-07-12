@@ -24,7 +24,6 @@ import censys.ipv4
 
 ROOT_STORE = None
 
-
 def log(s, type="DEBUG"):
     """ log wrapper """
     levels = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
@@ -80,7 +79,9 @@ class graderCert(object):
 
     def __init__(self, **kwargs):
         self.issues = []
+        pprint(f"SETTING UP GRADER {kwargs.items()}")
         for key, value in kwargs.items():
+            pprint(f"KEY={key} V={value}")
             setattr(self, key, value)
 
     def __repr__(self):
@@ -121,11 +122,13 @@ class graderCert(object):
             self.issues.append("TLSv1 supported")
             self.grade -= 10
 
-        self.verify_chain_of_trust()
+        if self.source == "SHODAN":
+            self.verify_chain_of_trust()
+        
         if not self.validation:
             self.issues.append("Failed Chain of Trust validation : " + self.validation_reason)
             self.grade -= 20
-
+    
     def verify_chain_of_trust(self):
         """  openssl manual validation of chain.  store validation result in self.validation 
             
@@ -208,6 +211,7 @@ class certSearch(object):
     def save_cache(self, filename=None):
         pickle.dump(self.searchAPI.raw_results, open(f"{filename}-{self.search_engine}.pkl", "wb"))
   
+
 class censysSearch(object):
     """ censys obj """
     RESULT_FIELDS = ['443','11211','143','1433','161','25','3306','3389','465','5432','5672','631','6379','6443','8883','ip','993','995']
@@ -257,7 +261,7 @@ class censysSearch(object):
 
         for port in result:
             if self.search_key.get(port,None):
-                print(f"processing : port{port} {self.search_key[port]}")    # search key  443 -> {key path}
+                print(f"processing : port{port} {self.search_key[port]}")
                 tls=result
                 for path in self.search_key[port]:
                     # iterate down dictionary until TLS certificate node reached
@@ -270,10 +274,11 @@ class censysSearch(object):
                     print(f"port {port} missing TLS cert")
                     break
         
-                pprint(result[port])
-                print("\n\n")
+                #pprint(result[port])
                 certinfo = {
+                    'source' : "Censys",
                     'ip' : result['ip'],
+                    'hostname' : result['ip'],
                     'altnames' : tls['certificate']['parsed']['names'],
                     'server_cert' : None,
                     'trust_chain' : None,
@@ -289,13 +294,16 @@ class censysSearch(object):
                     'subject' :  (tls['certificate']['parsed']['subject']).get('common_name',None),
                     'issued' :  tls['certificate']['parsed']['validity']['start'],
                     'validation' : tls['validation']['browser_trusted'],
-                    'validation_reason' : tls['validation']['browser_trusted'],
                 }
+                if not tls['validation']['browser_trusted']:
+                    certinfo['validation_reason']="validation error" 
+                else:
+                    certinfo['validation_reason']=""
+                    
                 try:
                     certinfo['dhparams']=result['443']['https']['dhe']['dh_params']['prime']['length']
                 except KeyError:
                     certinfo['dhparams']=None
-
                 try:
                     certinfo['heartbleed_enabled']=result['443']['https']['heartbeat_enabled']
                 except KeyError:
@@ -306,6 +314,7 @@ class censysSearch(object):
                 else:
                     certinfo['expired']=False
 
+        #pprint(certinfo)
         return certinfo
 
     def search(self, domain):
@@ -367,6 +376,7 @@ class shodanSearch(object):
         """ take shodan result dict and convert it to a dict for use in grading
         """
         certinfo = {
+            "source": "Shodan",
             "ip": result["ip_str"],
             "hostname": result["hostnames"],
             "isp": result["isp"],
@@ -420,6 +430,10 @@ if __name__ == "__main__":
     mysearch.search(domain, use_cache)
 
     for certinfo in mysearch.get_results():
+        pprint(certinfo)
+        if not certinfo.keys():
+            print("ERROR!!!!")
+            continue
         cert = graderCert(**certinfo)
         cert.grade_cert()
         certs.append(cert)
@@ -429,7 +443,7 @@ if __name__ == "__main__":
     table.field_names = ["Hostname", "Subject", "AltNames", "Grade", "Issues"]
     table._max_width = {"Hostname": 30, "Subject": 30, "AltNames": 30, "Grade": 5, "Issues": 50}
     for cert in certs:
-        table.add_row([", ".join(cert.hostname), cert.subject, 
+        table.add_row([cert.hostname, cert.subject, 
                        ", ".join(cert.altnames) + "\n\n", cert.grade, ", ".join(cert.issues) + "\n\n"])
     table.sortby = "Grade"
     print(table)
