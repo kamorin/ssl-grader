@@ -183,11 +183,10 @@ class certSearch(object):
     def search(self, domain):
         ''' load raw cache or  '''
         self.domain=domain
-        self.raw_results=[]
         #load cache of raw search results
         if self.use_cache:
             self.load_cache(domain)        
-        if not self.searchAPI.raw_results:
+        if not self.get_raw_results():
             self.searchAPI.search(domain)
             self.save_cache(domain)
         self.load_raw_results()
@@ -196,7 +195,7 @@ class certSearch(object):
         return self.searchAPI.results
 
     def get_raw_results(self):
-        return self.searchAPI.raw_results
+        return self.searchAPI.get_raw_results()
     
     def load_cache(self,filename=None):
         ''' load raw search results into raw_results from pickled file'''
@@ -245,6 +244,7 @@ class censysSearch(object):
             terms=item.split('.')
             self.search_key[terms[0]]=terms[:-3]
         self.result_limit = result_limit
+        self.raw_results=[]
         # parse and set API 
         self.CENSYS_API_ID,self.CENSYS_API_SECRET=(None,None)
         self.enabled=True
@@ -354,6 +354,7 @@ class shodanSearch(object):
     """ shodan search api
     """
     def __init__(self, result_limit, api_key):
+        self.raw_results=[]
         self.result_limit = result_limit
         self.SHODAN_API = None
         if api_key:
@@ -464,9 +465,6 @@ if __name__ == "__main__":
         cert_search.search(domain)
 
         for certinfo in cert_search.get_results():
-            if not certinfo.keys():
-                log(f"ERROR! bad cert : {certinfo}","DEBUG")
-                continue
             cert = graderCert(**certinfo)
             cert.grade_cert()
             certs.append(cert)
