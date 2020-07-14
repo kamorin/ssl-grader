@@ -425,7 +425,6 @@ def csv_output(domain, certs):
 if __name__ == "__main__":
     """  parse args, set global API Keys and execute search function
     """
-    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(prog="sslcert.py", description="sslcert grader")
     parser.add_argument("domain", help="subdomain to search for certificates")
     parser.add_argument("-s", required=False, dest="api_key_shodan", help="Shodan API key")
