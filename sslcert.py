@@ -79,9 +79,7 @@ class graderCert(object):
 
     def __init__(self, **kwargs):
         self.issues = []
-        pprint(f"SETTING UP GRADER {kwargs.items()}")
         for key, value in kwargs.items():
-            pprint(f"KEY={key} V={value}")
             setattr(self, key, value)
 
     def __repr__(self):
@@ -190,8 +188,9 @@ class certSearch(object):
         if self.use_cache:
             self.load_cache(domain)        
         if not self.raw_results:
-            self.searchAPI.search(domain)
-            self.save_cache(domain)
+            #self.searchAPI.search(domain)
+            #self.save_cache(domain)
+            pass
         self.load_raw_results()
 
     def get_results(self):
@@ -259,20 +258,20 @@ class censysSearch(object):
 
         for port in result:
             if self.search_key.get(port,None):
-                print(f"processing : port{port} {self.search_key[port]}")
+                #print(f"processing : port{port} {self.search_key[port]}")
                 tls=result
                 for path in self.search_key[port]:
                     # iterate down dictionary until TLS certificate node reached
                     if tls.get(path,None):
                         tls=tls[path]
                     else:
-                        print(f"ERROR in DATA!! {self.search_key[port]}")
+                        #print(f"ERROR in DATA!! {self.search_key[port]}")
+                        pass
 
                 if not tls.get('certificate',None):
                     print(f"port {port} missing TLS cert")
                     break
-        
-                #pprint(result[port])
+                #pprint(result['ip'])
                 certinfo = {
                     'source' : "Censys",
                     'ip' : result['ip'],
@@ -289,10 +288,13 @@ class censysSearch(object):
                                     'type' : tls['certificate']['parsed']['subject_key_info']['key_algorithm']['name'],
                                 },
                     'sig_alg' :  tls['certificate']['parsed']['signature_algorithm']['name'],
-                    'subject' :  (tls['certificate']['parsed']['subject']).get('common_name',None),
+                    'subject' : (tls['certificate']['parsed']['subject']).get('common_name',None),
                     'issued' :  tls['certificate']['parsed']['validity']['start'],
                     'validation' : tls['validation']['browser_trusted'],
                 }
+                if certinfo['subject']:
+                    certinfo['subject']=certinfo['subject'][0]
+                    
                 if not tls['validation']['browser_trusted']:
                     certinfo['validation_reason']="validation error" 
                 else:
@@ -387,6 +389,11 @@ class shodanSearch(object):
             "issued": datetime.strptime(result["ssl"]["cert"]["issued"], "%Y%m%d%H%M%SZ"),
             "altnames": extract_altname(result["ssl"]["chain"][0]),
         }
+        if not certinfo["hostname"]:
+            certinfo["hostname"]=""
+        elif type(certinfo["hostname"]) is list:
+            certinfo["hostname"]=certinfo["hostname"][0]
+        
         certinfo["server_cert"] = result["ssl"]["chain"][0]
         certinfo["trust_chain"] = None
         if len(result["ssl"]["chain"]) > 1:
@@ -411,9 +418,9 @@ def csv_output(domain, certs):
     if csv_output:
         with open(domain + ".csv", "w", newline="") as csvfile:
             certwriter = csv.writer(csvfile, quotechar='"')
-            certwriter.writerow(["Hostname", "Subject", "AltNames", "Grade", "Issues"])
+            certwriter.writerow(["Source","Hostname", "Subject", "AltNames", "Grade", "Issues"])
             for cert in certs:
-                certwriter.writerow([", ".join(cert.hostname), cert.subject, 
+                certwriter.writerow([cert.source[0], cert.hostname, cert.subject, 
                                      ", ".join(cert.altnames), cert.grade, ", ".join(cert.issues)])
 
 
@@ -421,29 +428,31 @@ if __name__ == "__main__":
     """  parse args, set global API Keys and execute search function
     """
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(message)s")
-    parser = argparse.ArgumentParser(prog="ssl-cert.py", description="ssl-cert grader")
+    parser = argparse.ArgumentParser(prog="sslcert.py", description="sslcert grader")
     parser.add_argument("domain", help="subdomain to search for certificates")
     parser.add_argument("-s", required=False, dest="api_key_shodan", help="Shodan API key")
-    parser.add_argument("--censys_id", required=False, dest="api_key_censys_id", help="Censys API ID")
-    parser.add_argument("--censys_secret", required=False, dest="api_key_censys_secret", help="Censys API Secret")
-    parser.add_argument("-o", required=False, dest="csv_output", action="store_true", default=False, help="output report to a CSV file")
+    parser.add_argument("-c", required=False, dest="api_key_censys", help="Censys API ID:Censys API Secret")
+    parser.add_argument("-o", required=False, dest="csv_output", help="output report to a CSV file")
     parser.add_argument("-l", required=False, dest="result_limit", type=int, default=100, action="store", help="limit result set to save on API credits")
-    parser.add_argument("-u", required=False, dest="use_cache", action="store_true", default=False, help="used cache to generate report")
+    parser.add_argument("-u", required=False, dest="use_cache", action="store_true", default=False, help="store and/or retrieve lcoal cache to generate report")
     args = parser.parse_args()
 
     log(args, "INFO")
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(message)s")
 
-    if args.domain:
-        domain = args.domain
+    domain = args.domain
 
     # load root store
     ROOT_STORE = load_root_ca_list()
 
     certs = []
+    if args.api_key_censys:
+        censys_api_id,censys_api_key=args.api_key_censys.split(':')
+    else:
+        censys_api_id,censys_api_key=(None,None)
 
     search_list = [certSearch("SHODAN", args.use_cache, args.result_limit, args.api_key_shodan),
-                   certSearch("CENSYS", args.use_cache, args.result_limit, args.api_key_censys_id, args.api_key_censys_secret)]
+                   certSearch("CENSYS", args.use_cache, args.result_limit, censys_api_id, censys_api_key ) ]
     
     for cert_search in search_list:
         cert_search.search(domain)
@@ -451,7 +460,7 @@ if __name__ == "__main__":
         for certinfo in cert_search.get_results():
             #pprint(certinfo)
             if not certinfo.keys():
-                print("ERROR!!!!")
+                #print("ERROR!!!!")
                 continue
             cert = graderCert(**certinfo)
             cert.grade_cert()
