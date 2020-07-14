@@ -47,7 +47,7 @@ def extract_altname(server_crt):
     return san
 
 
-def load_root_ca_list():
+def load_root_ca_list(debug=False):
     """ load all certificates found in openssl cert.pem (via certifi.where())
         
         :return: returns X509store obj loaded with trusted Cert.  
@@ -64,7 +64,7 @@ def load_root_ca_list():
             for cert in certs:
                 cacert = crypto.load_certificate(crypto.FILETYPE_PEM, cert.as_text())
                 store.add_cert(cacert)
-                log(f"loading root CA store w/ {cacert.get_subject()} ")
+                log(f"loading root CA store w/ {cacert.get_subject()} ") if debug else None
     except EnvironmentError:  # parent of IOError, OSError *and* WindowsError where available
         log(f"No CA Store found at {certifi.where()}, can not validate\n\n", "ERROR")
         raise FileNotFoundError
@@ -127,7 +127,7 @@ class graderCert(object):
             self.issues.append("Failed Chain of Trust validation : " + self.validation_reason)
             self.grade -= 20
     
-    def verify_chain_of_trust(self):
+    def verify_chain_of_trust(self, debug=False):
         """  openssl manual validation of chain.  store validation result in self.validation 
             
             :param server_cert: server cert in PEM UTF-8 string format
@@ -136,12 +136,12 @@ class graderCert(object):
             :type trusted_chain: list of str
         """
         certificate = crypto.load_certificate(crypto.FILETYPE_PEM, self.server_cert)
-        log(f"loaded server cert: {certificate.get_subject().CN}", "INFO")
+        log(f"loaded server cert: {certificate.get_subject().CN}", "INFO") if debug else None
 
         if self.trust_chain:
             for trusted_cert_pem in self.trust_chain:
                 trusted_cert = crypto.load_certificate(crypto.FILETYPE_PEM, trusted_cert_pem)
-                log(f"added intermediate cert {trusted_cert.get_subject()}")
+                log(f"added intermediate cert {trusted_cert.get_subject()}") if debug else None
                 ROOT_STORE.add_cert(trusted_cert)
 
         # and verify the the chain of trust
@@ -150,12 +150,12 @@ class graderCert(object):
         try:
             store_ctx.verify_certificate()
         except Exception as e:
-            log(f"Validation Failed: {e.args[0][2]}")
+            log(f"Validation Failed: {e.args[0][2]} for {certificate.get_subject().CN}") if debug else None
             self.validation = False
             self.validation_reason = e.args[0][2]
             return
 
-        log("Validation Successful")
+        log(f"Validation Successful for {certificate.get_subject().CN}") if debug else None
         self.validation = True
         self.validation_reason = None
 
@@ -164,13 +164,13 @@ class certSearch(object):
     """ facade search obj
     """
     
-    def __init__(self, search_engine, use_cache, result_limit, api_id, api_secret=None):
+    def __init__(self, search_engine, use_cache, result_limit, api_id):
         self.use_cache=use_cache
         self.search_engine = search_engine
         if search_engine == "SHODAN":
             self.searchAPI = shodanSearch(result_limit, api_id)
         else:
-            self.searchAPI = censysSearch(result_limit, api_id, api_secret)
+            self.searchAPI = censysSearch(result_limit, api_id)
 
     def load_raw_results(self):
         '''  load search results from self.raw_results into common format dict self.results '''
@@ -183,11 +183,10 @@ class certSearch(object):
     def search(self, domain):
         ''' load raw cache or  '''
         self.domain=domain
-        self.raw_results=[]
         #load cache of raw search results
         if self.use_cache:
             self.load_cache(domain)        
-        if not self.raw_results:
+        if not self.get_raw_results():
             self.searchAPI.search(domain)
             self.save_cache(domain)
         self.load_raw_results()
@@ -196,7 +195,7 @@ class certSearch(object):
         return self.searchAPI.results
 
     def get_raw_results(self):
-        return self.searchAPI.raw_results
+        return self.searchAPI.get_raw_results()
     
     def load_cache(self,filename=None):
         ''' load raw search results into raw_results from pickled file'''
@@ -210,6 +209,8 @@ class certSearch(object):
     def save_cache(self, filename=None):
         pickle.dump(self.searchAPI.raw_results, open(f"{filename}-{self.search_engine}.pkl", "wb"))
   
+    def enabled(self):
+        return self.searchAPI.enabled
 
 class censysSearch(object):
     """ censys obj """
@@ -236,20 +237,24 @@ class censysSearch(object):
                     '995.pop3s.tls.tls.certificate.parsed.names',
                     ]
 
-    def __init__(self, result_limit, api_id, api_secret):
+    def __init__(self, result_limit, api_key):
         # parse SEARCHFIELDs and create a dict pointing to TLS 
         self.search_key={}
         for item in self.SEARCH_FIELDS:
             terms=item.split('.')
             self.search_key[terms[0]]=terms[:-3]
         self.result_limit = result_limit
+        self.raw_results=[]
+        # parse and set API 
         self.CENSYS_API_ID,self.CENSYS_API_SECRET=(None,None)
-        if api_id:
-            self.CENSYS_API_ID = api_id
-            self.CENSYS_API_SECRET = api_secret
-        elif os.getenv("CENSYS_API_ID", None) and os.getenv("CENSYS_API_SECRET", None): 
-            self.CENSYS_API_ID = os.environ["CENSYS_API_ID"]
-            self.CENSYS_API_SECRET = os.environ["CENSYS_API_SECRET"]
+        self.enabled=True
+        if api_key:
+            self.CENSYS_API_ID, self.CENSYS_API_SECRET = api_key.split(':')
+        elif os.getenv("CENSYS_API", None):
+            self.CENSYS_API_ID, self.CENSYS_API_SECRET = os.environ["CENSYS_API"].split(':')
+        else:
+            # if no API key available, set search enabled = False
+            self.enabled=False
 
     def load(self,result):
         certinfo = {}
@@ -342,11 +347,14 @@ class censysSearch(object):
     def get_raw_results(self):
         return self.raw_results
 
+    def enabled(self):
+        return self.enabled
 
 class shodanSearch(object):
     """ shodan search api
     """
     def __init__(self, result_limit, api_key):
+        self.raw_results=[]
         self.result_limit = result_limit
         self.SHODAN_API = None
         if api_key:
@@ -400,6 +408,10 @@ class shodanSearch(object):
         return certinfo
 
 
+    def enabled(self):
+        return self.enabled
+
+
 def print_report(certs):
     # print report
     table = PrettyTable()
@@ -425,7 +437,6 @@ def csv_output(domain, certs):
 if __name__ == "__main__":
     """  parse args, set global API Keys and execute search function
     """
-    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(prog="sslcert.py", description="sslcert grader")
     parser.add_argument("domain", help="subdomain to search for certificates")
     parser.add_argument("-s", required=False, dest="api_key_shodan", help="Shodan API key")
@@ -433,11 +444,11 @@ if __name__ == "__main__":
     parser.add_argument("-o", required=False, dest="csv_output", help="output report to a CSV file")
     parser.add_argument("-l", required=False, dest="result_limit", type=int, default=100, action="store", help="limit result set to save on API credits")
     parser.add_argument("-u", required=False, dest="use_cache", action="store_true", default=False, help="store and/or retrieve lcoal cache to generate report")
-    parser.add_argument("-d", required=False, dest="debug", type=int, default=20, action="store", help="debugging level")
+    parser.add_argument("-d", required=False, dest="debug", type=int, default=20, action="store", help="debugging verbosity level")
     args = parser.parse_args()
 
+    logging.basicConfig(stream=sys.stdout, level=args.debug, format="%(message)s")
     log(args, "INFO")
-    logging.basicConfig(stream=sys.stderr, level=args.debug, format="%(message)s")
 
     domain = args.domain
 
@@ -445,21 +456,15 @@ if __name__ == "__main__":
     ROOT_STORE = load_root_ca_list()
 
     certs = []
-    if args.api_key_censys:
-        censys_api_id,censys_api_key=args.api_key_censys.split(':')
-    else:
-        censys_api_id,censys_api_key=(None,None)
-
     search_list = [certSearch("SHODAN", args.use_cache, args.result_limit, args.api_key_shodan),
-                   certSearch("CENSYS", args.use_cache, args.result_limit, censys_api_id, censys_api_key ) ]
+                   certSearch("CENSYS", args.use_cache, args.result_limit, args.api_key_censys) ]
     
     for cert_search in search_list:
+        if not cert_search.enabled():
+            continue
         cert_search.search(domain)
 
         for certinfo in cert_search.get_results():
-            if not certinfo.keys():
-                log("ERROR!!!!","DEBUG")
-                continue
             cert = graderCert(**certinfo)
             cert.grade_cert()
             certs.append(cert)
