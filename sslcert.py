@@ -188,9 +188,8 @@ class certSearch(object):
         if self.use_cache:
             self.load_cache(domain)        
         if not self.raw_results:
-            #self.searchAPI.search(domain)
-            #self.save_cache(domain)
-            pass
+            self.searchAPI.search(domain)
+            self.save_cache(domain)
         self.load_raw_results()
 
     def get_results(self):
@@ -258,20 +257,20 @@ class censysSearch(object):
 
         for port in result:
             if self.search_key.get(port,None):
-                #print(f"processing : port{port} {self.search_key[port]}")
+                log(f"processing : port{port} {self.search_key[port]}")
                 tls=result
                 for path in self.search_key[port]:
                     # iterate down dictionary until TLS certificate node reached
                     if tls.get(path,None):
                         tls=tls[path]
                     else:
-                        #print(f"ERROR in DATA!! {self.search_key[port]}")
+                        log(f"ERROR in DATA!! {self.search_key[port]}")
                         pass
 
                 if not tls.get('certificate',None):
-                    print(f"port {port} missing TLS cert")
+                    log(f"port {port} missing TLS cert")
                     break
-                #pprint(result['ip'])
+
                 certinfo = {
                     'source' : "Censys",
                     'ip' : result['ip'],
@@ -314,7 +313,6 @@ class censysSearch(object):
                 else:
                     certinfo['expired']=False
 
-        #pprint(certinfo)
         return certinfo
 
     def search(self, domain):
@@ -435,10 +433,11 @@ if __name__ == "__main__":
     parser.add_argument("-o", required=False, dest="csv_output", help="output report to a CSV file")
     parser.add_argument("-l", required=False, dest="result_limit", type=int, default=100, action="store", help="limit result set to save on API credits")
     parser.add_argument("-u", required=False, dest="use_cache", action="store_true", default=False, help="store and/or retrieve lcoal cache to generate report")
+    parser.add_argument("-d", required=False, dest="debug", type=int, default=20, action="store", help="debugging level")
     args = parser.parse_args()
 
     log(args, "INFO")
-    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(message)s")
+    logging.basicConfig(stream=sys.stderr, level=args.debug, format="%(message)s")
 
     domain = args.domain
 
@@ -458,9 +457,8 @@ if __name__ == "__main__":
         cert_search.search(domain)
 
         for certinfo in cert_search.get_results():
-            #pprint(certinfo)
             if not certinfo.keys():
-                #print("ERROR!!!!")
+                log("ERROR!!!!","DEBUG")
                 continue
             cert = graderCert(**certinfo)
             cert.grade_cert()
