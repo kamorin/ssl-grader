@@ -122,7 +122,7 @@ class graderCert(object):
             self.issues.append("TLSv1 supported")
             self.grade -= 10
 
-        if self.source == "SHODAN":
+        if self.server_cert:
             self.verify_chain_of_trust()
         
         if not self.validation:
@@ -166,7 +166,8 @@ class certSearch(object):
     """ facade search obj
     """
     
-    def __init__(self, search_engine, result_limit, api_id, api_secret=None):
+    def __init__(self, search_engine, use_cache, result_limit, api_id, api_secret=None):
+        self.use_cache=use_cache
         self.search_engine = search_engine
         if search_engine == "SHODAN":
             self.searchAPI = shodanSearch(result_limit, api_id)
@@ -181,12 +182,12 @@ class certSearch(object):
             certs.append(self.searchAPI.load(result))
         self.searchAPI.results = certs
 
-    def search(self, domain, use_cache):
+    def search(self, domain):
         ''' load raw cache or  '''
         self.domain=domain
         self.raw_results=[]
         #load cache of raw search results
-        if use_cache:
+        if self.use_cache:
             self.load_cache(domain)        
         if not self.raw_results:
             self.searchAPI.search(domain)
@@ -243,17 +244,14 @@ class censysSearch(object):
         for item in self.SEARCH_FIELDS:
             terms=item.split('.')
             self.search_key[terms[0]]=terms[:-3]
-
         self.result_limit = result_limit
+        self.CENSYS_API_ID,self.CENSYS_API_SECRET=(None,None)
         if api_id:
             self.CENSYS_API_ID = api_id
             self.CENSYS_API_SECRET = api_secret
         elif os.getenv("CENSYS_API_ID", None) and os.getenv("CENSYS_API_SECRET", None): 
             self.CENSYS_API_ID = os.environ["CENSYS_API_ID"]
             self.CENSYS_API_SECRET = os.environ["CENSYS_API_SECRET"]
-        else:
-            log("CENSYS_API_ID or CENSYS_API_SECRET Key missing.  Pass as argument or set env vars", "ERROR")
-            sys.exit(1)
 
     def load(self,result):
         certinfo = {}
@@ -350,13 +348,11 @@ class shodanSearch(object):
     """
     def __init__(self, result_limit, api_key):
         self.result_limit = result_limit
+        self.SHODAN_API = None
         if api_key:
             self.SHODAN_API = api_key
         elif os.getenv("SHODAN_API", None):
             self.SHODAN_API = os.environ["SHODAN_API"]
-        else:
-            log("SHODAN_API Key missing.  Pass as argument or set SHODAN_API env var", "ERROR")
-            sys.exit(1)
 
     def get_results(self):
         return self.results
@@ -399,6 +395,28 @@ class shodanSearch(object):
         return certinfo
 
 
+def print_report(certs):
+    # print report
+    table = PrettyTable()
+    table.field_names = ["Source","Hostname", "Subject", "AltNames", "Grade", "Issues"]
+    table._max_width = {"Source" : 2, "Hostname": 30, "Subject": 30, "AltNames": 30, "Grade": 5, "Issues": 50}
+    for cert in certs:
+        table.add_row([cert.source[0], cert.hostname, cert.subject, 
+                       ", ".join(cert.altnames) + "\n\n", cert.grade, ", ".join(cert.issues) + "\n\n"])
+    table.sortby = "Grade"
+    print(table)
+
+def csv_output(domain, certs):
+     # optional CSV output
+    if csv_output:
+        with open(domain + ".csv", "w", newline="") as csvfile:
+            certwriter = csv.writer(csvfile, quotechar='"')
+            certwriter.writerow(["Hostname", "Subject", "AltNames", "Grade", "Issues"])
+            for cert in certs:
+                certwriter.writerow([", ".join(cert.hostname), cert.subject, 
+                                     ", ".join(cert.altnames), cert.grade, ", ".join(cert.issues)])
+
+
 if __name__ == "__main__":
     """  parse args, set global API Keys and execute search function
     """
@@ -414,8 +432,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     log(args, "INFO")
-    csv_output = args.csv_output
-    use_cache = args.use_cache
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(message)s")
 
     if args.domain:
@@ -425,34 +441,22 @@ if __name__ == "__main__":
     ROOT_STORE = load_root_ca_list()
 
     certs = []
-    #mysearch = certSearch("SHODAN", args.result_limit, args.api_key_shodan, )
-    mysearch = certSearch("CENSYS", args.result_limit, args.api_key_censys_id, args.api_key_censys_secret)
-    mysearch.search(domain, use_cache)
 
-    for certinfo in mysearch.get_results():
-        pprint(certinfo)
-        if not certinfo.keys():
-            print("ERROR!!!!")
-            continue
-        cert = graderCert(**certinfo)
-        cert.grade_cert()
-        certs.append(cert)
+    search_list = [certSearch("SHODAN", args.use_cache, args.result_limit, args.api_key_shodan),
+                   certSearch("CENSYS", args.use_cache, args.result_limit, args.api_key_censys_id, args.api_key_censys_secret)]
+    
+    for cert_search in search_list:
+        cert_search.search(domain)
 
-    # print report
-    table = PrettyTable()
-    table.field_names = ["Hostname", "Subject", "AltNames", "Grade", "Issues"]
-    table._max_width = {"Hostname": 30, "Subject": 30, "AltNames": 30, "Grade": 5, "Issues": 50}
-    for cert in certs:
-        table.add_row([cert.hostname, cert.subject, 
-                       ", ".join(cert.altnames) + "\n\n", cert.grade, ", ".join(cert.issues) + "\n\n"])
-    table.sortby = "Grade"
-    print(table)
+        for certinfo in cert_search.get_results():
+            #pprint(certinfo)
+            if not certinfo.keys():
+                print("ERROR!!!!")
+                continue
+            cert = graderCert(**certinfo)
+            cert.grade_cert()
+            certs.append(cert)
 
-    # optional CSV output
-    if csv_output:
-        with open(domain + ".csv", "w", newline="") as csvfile:
-            certwriter = csv.writer(csvfile, quotechar='"')
-            certwriter.writerow(["Hostname", "Subject", "AltNames", "Grade", "Issues"])
-            for cert in certs:
-                certwriter.writerow([", ".join(cert.hostname), cert.subject, 
-                                     ", ".join(cert.altnames), cert.grade, ", ".join(cert.issues)])
+print_report(certs)
+if args.csv_output:
+    csv_output(domain, certs)
