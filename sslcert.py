@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+
 """SSL Grader"""
 __author__ = "Kevin Amorin"
 __copyright__ = "Copyright 2020"
