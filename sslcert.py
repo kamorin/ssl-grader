@@ -97,7 +97,11 @@ class graderCert(object):
         # dhparams': {'bits': 4096,
         # ECDHE enable forward secrecy with modern web browsers
 
-        if "RSA" not in self.cipher["name"] or "ADH" in self.cipher["name"] or "CBC" in self.cipher["name"] or "RC4" in self.cipher["name"] or "TLS-RSA" in self.cipher["name"]:
+        if "RSA" not in self.cipher["name"] or \
+           "ADH" in self.cipher["name"] or  \
+           "CBC" in self.cipher["name"] or  \
+           "RC4" in self.cipher["name"] or  \
+           "TLS-RSA" in self.cipher["name"]:
             self.issues.append(f"Bad cipher {self.cipher['name']}")
             # Cipher Block Chaining (CBC) ciphers were marked as weak (around March 2019)
             self.grade -= 10
@@ -292,7 +296,8 @@ class censysSearch(object):
                     "expires": tls["certificate"]["parsed"]["validity"]["end"],
                     "version": tls["version"],
                     "cipher": {"name": tls["cipher_suite"]["name"], "version": tls["version"],},
-                    "pubkey": {"bits": tls["certificate"]["parsed"]["subject_key_info"]["rsa_public_key"]["length"], "type": tls["certificate"]["parsed"]["subject_key_info"]["key_algorithm"]["name"],},
+                    "pubkey": {"bits": tls["certificate"]["parsed"]["subject_key_info"]["rsa_public_key"]["length"], 
+                               "type": tls["certificate"]["parsed"]["subject_key_info"]["key_algorithm"]["name"],},
                     "sig_alg": tls["certificate"]["parsed"]["signature_algorithm"]["name"],
                     "subject": (tls["certificate"]["parsed"]["subject"]).get("common_name", None),
                     "issued": tls["certificate"]["parsed"]["validity"]["start"],
@@ -424,7 +429,8 @@ def print_report(certs):
     table.field_names = ["Source", "Hostname", "Subject", "AltNames", "Grade", "Issues"]
     table._max_width = {"Source": 2, "Hostname": 30, "Subject": 30, "AltNames": 30, "Grade": 5, "Issues": 50}
     for cert in certs:
-        table.add_row([cert.source[0], cert.hostname, cert.subject, ", ".join(cert.altnames) + "\n\n", cert.grade, ", ".join(cert.issues) + "\n\n"])
+        table.add_row([cert.source[0], cert.hostname, cert.subject, 
+                       ", ".join(cert.altnames) + "\n\n", cert.grade, ", ".join(cert.issues) + "\n\n"])
     table.sortby = "Grade"
     print(table)
 
@@ -436,7 +442,8 @@ def csv_output(domain, certs):
             certwriter = csv.writer(csvfile, quotechar='"')
             certwriter.writerow(["Source", "Hostname", "Subject", "AltNames", "Grade", "Issues"])
             for cert in certs:
-                certwriter.writerow([cert.source[0], cert.hostname, cert.subject, ", ".join(cert.altnames), cert.grade, ", ".join(cert.issues)])
+                certwriter.writerow([cert.source[0], cert.hostname, cert.subject, 
+                                     ", ".join(cert.altnames), cert.grade, ", ".join(cert.issues)])
 
 
 if __name__ == "__main__":
@@ -461,7 +468,8 @@ if __name__ == "__main__":
     ROOT_STORE = load_root_ca_list()
 
     certs = []
-    search_list = [certSearch("SHODAN", args.use_cache, args.result_limit, args.api_key_shodan), certSearch("CENSYS", args.use_cache, args.result_limit, args.api_key_censys)]
+    search_list = [certSearch("SHODAN", args.use_cache, args.result_limit, args.api_key_shodan), 
+                   certSearch("CENSYS", args.use_cache, args.result_limit, args.api_key_censys)]
 
     enabled_search_list = []
     [enabled_search_list.append(search) for search in search_list if search.enabled()]
