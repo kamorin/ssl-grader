@@ -1,7 +1,7 @@
 ssl-grader:  SSL certs collector and grader
 =======================================
 
-What is sslgrader?
+What is ssl grader?
 -------------------
 
 This program will do the following:
