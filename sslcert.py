@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-
 """SSL Grader"""
 __author__ = "Kevin Amorin"
 __copyright__ = "Copyright 2020"
@@ -358,10 +357,13 @@ class shodanSearch(object):
         self.raw_results=[]
         self.result_limit = result_limit
         self.SHODAN_API = None
+        self.enabled=True
         if api_key:
             self.SHODAN_API = api_key
         elif os.getenv("SHODAN_API", None):
             self.SHODAN_API = os.environ["SHODAN_API"]
+        else:
+            self.enabled=False
 
     def get_results(self):
         return self.results
@@ -407,7 +409,6 @@ class shodanSearch(object):
             certinfo["trust_chain"] = result["ssl"]["chain"][1:]
 
         return certinfo
-
 
     def enabled(self):
         return self.enabled
@@ -460,6 +461,11 @@ if __name__ == "__main__":
     search_list = [certSearch("SHODAN", args.use_cache, args.result_limit, args.api_key_shodan),
                    certSearch("CENSYS", args.use_cache, args.result_limit, args.api_key_censys) ]
     
+    if not any([search.enabled() for search in search_list]):
+        parser.print_help()
+        sys.stderr.write("\n\nNo Search API Key Available\n\n")
+        sys.exit(1)
+
     for cert_search in search_list:
         if not cert_search.enabled():
             continue
