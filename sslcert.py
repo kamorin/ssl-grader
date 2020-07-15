@@ -461,17 +461,19 @@ if __name__ == "__main__":
     search_list = [certSearch("SHODAN", args.use_cache, args.result_limit, args.api_key_shodan),
                    certSearch("CENSYS", args.use_cache, args.result_limit, args.api_key_censys) ]
     
-    if not any([search.enabled() for search in search_list]):
+    enabled_search_list=[]
+    [enabled_search_list.append(search) for search in search_list if search.enabled()]
+    if not enabled_search_list:
         parser.print_help()
-        sys.stderr.write("\n\nNo Search API Key Available\n\n")
+        sys.stderr.write("\n\nNo Search Service Specified\nPlease provide API Key for one or more services\n\n")
         sys.exit(1)
 
-    for cert_search in search_list:
-        if not cert_search.enabled():
-            continue
+    for cert_search in enabled_search_list:
         cert_search.search(domain)
 
         for certinfo in cert_search.get_results():
+            if not certinfo:
+                continue
             cert = graderCert(**certinfo)
             cert.grade_cert()
             certs.append(cert)
