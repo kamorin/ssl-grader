@@ -357,10 +357,13 @@ class shodanSearch(object):
         self.raw_results=[]
         self.result_limit = result_limit
         self.SHODAN_API = None
+        self.enabled=True
         if api_key:
             self.SHODAN_API = api_key
         elif os.getenv("SHODAN_API", None):
             self.SHODAN_API = os.environ["SHODAN_API"]
+        else:
+            self.enabled=False
 
     def get_results(self):
         return self.results
@@ -406,7 +409,6 @@ class shodanSearch(object):
             certinfo["trust_chain"] = result["ssl"]["chain"][1:]
 
         return certinfo
-
 
     def enabled(self):
         return self.enabled
@@ -459,12 +461,19 @@ if __name__ == "__main__":
     search_list = [certSearch("SHODAN", args.use_cache, args.result_limit, args.api_key_shodan),
                    certSearch("CENSYS", args.use_cache, args.result_limit, args.api_key_censys) ]
     
-    for cert_search in search_list:
-        if not cert_search.enabled():
-            continue
+    enabled_search_list=[]
+    [enabled_search_list.append(search) for search in search_list if search.enabled()]
+    if not enabled_search_list:
+        parser.print_help()
+        sys.stderr.write("\n\nNo Search Service Specified\nPlease provide API Key for one or more services\n\n")
+        sys.exit(1)
+
+    for cert_search in enabled_search_list:
         cert_search.search(domain)
 
         for certinfo in cert_search.get_results():
+            if not certinfo:
+                continue
             cert = graderCert(**certinfo)
             cert.grade_cert()
             certs.append(cert)
