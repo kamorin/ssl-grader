@@ -88,7 +88,7 @@ class graderCert(object):
     def grade_cert(self):
         """ process cert attributes, add to list of issues and update grade
         """
-        if self.sig_alg != "sha256WithRSAEncryption":
+        if self.sig_alg != "sha256WithRSAEncryption" and self.sig_alg != "SHA256WithRSA":
             self.issues.append(f"Signature algorithm weak {self.sig_alg}")
             self.grade -= 10
 
@@ -275,6 +275,12 @@ class censysSearch(object):
                 if not tls.get('certificate',None):
                     log(f"port {port} missing TLS cert")
                     break
+                if not tls['certificate']['parsed']['subject_key_info'].get('rsa_public_key',None):
+                    log(f"rsa public key missing {port} {tls}")
+                    break           
+                if not tls['certificate']['parsed'].get('names',None):
+                    log(f"names  missing {port} {tls}")
+                    break    
 
                 certinfo = {
                     'source' : "Censys",
@@ -289,7 +295,7 @@ class censysSearch(object):
                                 'version' : tls['version'],
                                 },
                     'pubkey' :  {'bits' : tls['certificate']['parsed']['subject_key_info']['rsa_public_key']['length'],
-                                    'type' : tls['certificate']['parsed']['subject_key_info']['key_algorithm']['name'],
+                                 'type' : tls['certificate']['parsed']['subject_key_info']['key_algorithm']['name'],
                                 },
                     'sig_alg' :  tls['certificate']['parsed']['signature_algorithm']['name'],
                     'subject' : (tls['certificate']['parsed']['subject']).get('common_name',None),
@@ -328,7 +334,7 @@ class censysSearch(object):
 
         censys_cert= censys.ipv4.CensysIPv4(api_id=self.CENSYS_API_ID,api_secret=self.CENSYS_API_SECRET)
         try:
-            api = censys_cert.search(query, self.RESULT_FIELDS, flatten=False)
+            api = censys_cert.search(query, self.RESULT_FIELDS, flatten=False,max_records=1000)
             self.raw_results = list(api)
         except censys.base.CensysUnauthorizedException:
             sys.stderr.write('[+] Censys account details wrong. \n')
