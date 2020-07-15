@@ -66,27 +66,27 @@ example output
 +--------+--------------------------------+-------------------------------+--------------------------------+-------+----------------------------------------------------+
 | Source |            Hostname            |            Subject            |            AltNames            | Grade |                       Issues                       |
 +--------+--------------------------------+-------------------------------+--------------------------------+-------+----------------------------------------------------+
-|   S    |         blargh.acme.edu        |         blargh.acme.edu        |                                |   20  | Signature algorithm weak md5WithRSAEncryption, Bad |
+|   S    |         blargh.acme.edu        |         blargh.acme.edu       |                                |   20  | Signature algorithm weak md5WithRSAEncryption, Bad |
 |        |                                |                               |                                |       | cipher AES256-GCM-SHA384, Bits 1024 <2048, Expired |
 |        |                                |                               |                                |       |    Cert 20110425123248Z, SSLv3 supported, TLSv1    |
 |        |                                |                               |                                |       | supported, Failed Chain of Trust validation : self |
 |        |                                |                               |                                |       |                 signed certificate                 |
 |        |                                |                               |                                |       |                                                    |
 |        |                                |                               |                                |       |                                                    |
-|   S    |    babylon5.goddard.acme.edu   |    babylon5.goddard.acme.edu   |                                |   30  |  Signature algorithm weak sha1WithRSAEncryption,   |
+|   S    |    babylon5.goddard.acme.edu   |    babylon5.goddard.acme.edu  |                                |   30  |  Signature algorithm weak sha1WithRSAEncryption,   |
 |        |                                |                               |                                |       |   Bits 1024 <2048, Expired Cert 20130319155442Z,   |
 |        |                                |                               |                                |       | SSLv3 supported, TLSv1 supported, Failed Chain of  |
 |        |                                |                               |                                |       |     Trust validation : self signed certificate     |
 |        |                                |                               |                                |       |                                                    |
 |        |                                |                               |                                |       |                                                    |
-|   S    |        fh013-cp.acme.edu       |     FH013-CP.admin.acme.edu    |     FH013-CP.admin.acme.edu     |   30  |  Signature algorithm weak sha1WithRSAEncryption,   |
+|   S    |        fh013-cp.acme.edu       |     FH013-CP.admin.acme.edu   |     FH013-CP.admin.acme.edu    |   30  |  Signature algorithm weak sha1WithRSAEncryption,   |
 |        |                                |                               |                                |       |   Bits 1024 <2048, Expired Cert 20191007185823Z,   |
 |        |                                |                               |                                |       | SSLv3 supported, TLSv1 supported, Failed Chain of  |
 |        |                                |                               |                                |       |   Trust validation : unable to get local issuer    |
 |        |                                |                               |                                |       |                    certificate                     |
 |        |                                |                               |                                |       |                                                    |
 |        |                                |                               |                                |       |                                                    |
-|   C    |         130.215.140.25         |    equature-01-ilo.acme.edu    |    equature-01-ilo.acme.edu,    |   40  |  Signature algorithm weak SHA1WithRSA, Bad cipher  |
+|   C    |         130.215.140.25         |    equature-01-ilo.acme.edu   |    equature-01-ilo.acme.edu,   |   40  |  Signature algorithm weak SHA1WithRSA, Bad cipher  |
 |        |                                |                               |        equature-01-ilo         |       |  TLS_RSA_WITH_RC4_128_SHA, Bits 1024 <2048, TLSv1  |
 |        |                                |                               |                                |       |   supported, Failed Chain of Trust validation :    |
 |        |                                |                               |                                |       |                  validation error                  |
