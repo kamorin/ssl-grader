@@ -24,6 +24,7 @@ import censys.ipv4
 
 ROOT_STORE = None
 
+
 def log(s, type="DEBUG"):
     """ log wrapper """
     levels = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
@@ -74,6 +75,7 @@ def load_root_ca_list(debug=False):
 class graderCert(object):
     """  store certs in a common format and grade their security on a 0-100 scale, 0 poor-100 strong
     """
+
     grade = 100
     issues = None
 
@@ -95,11 +97,7 @@ class graderCert(object):
         # dhparams': {'bits': 4096,
         # ECDHE enable forward secrecy with modern web browsers
 
-        if "RSA" not in self.cipher["name"] or  \
-           "ADH" in self.cipher["name"] or  \
-           "CBC" in self.cipher["name"] or  \
-           "RC4" in self.cipher["name"] or  \
-           "TLS-RSA" in self.cipher["name"]:
+        if "RSA" not in self.cipher["name"] or "ADH" in self.cipher["name"] or "CBC" in self.cipher["name"] or "RC4" in self.cipher["name"] or "TLS-RSA" in self.cipher["name"]:
             self.issues.append(f"Bad cipher {self.cipher['name']}")
             # Cipher Block Chaining (CBC) ciphers were marked as weak (around March 2019)
             self.grade -= 10
@@ -122,11 +120,11 @@ class graderCert(object):
 
         if self.server_cert:
             self.verify_chain_of_trust()
-        
+
         if not self.validation:
             self.issues.append("Failed Chain of Trust validation : " + self.validation_reason)
             self.grade -= 20
-    
+
     def verify_chain_of_trust(self, debug=False):
         """  openssl manual validation of chain.  store validation result in self.validation 
             
@@ -163,9 +161,9 @@ class graderCert(object):
 class certSearch(object):
     """ facade search obj
     """
-    
+
     def __init__(self, search_engine, use_cache, result_limit, api_id):
-        self.use_cache=use_cache
+        self.use_cache = use_cache
         self.search_engine = search_engine
         if search_engine == "SHODAN":
             self.searchAPI = shodanSearch(result_limit, api_id)
@@ -173,7 +171,7 @@ class certSearch(object):
             self.searchAPI = censysSearch(result_limit, api_id)
 
     def load_raw_results(self):
-        '''  load search results from self.raw_results into common format dict self.results '''
+        """  load search results from self.raw_results into common format dict self.results """
         certs = []
         for result in self.searchAPI.raw_results:
             # load results and convert it to a dict we can grade
@@ -181,11 +179,11 @@ class certSearch(object):
         self.searchAPI.results = certs
 
     def search(self, domain):
-        ''' load raw cache or  '''
-        self.domain=domain
-        #load cache of raw search results
+        """ load raw cache or  """
+        self.domain = domain
+        # load cache of raw search results
         if self.use_cache:
-            self.load_cache(domain)        
+            self.load_cache(domain)
         if not self.get_raw_results():
             self.searchAPI.search(domain)
             self.save_cache(domain)
@@ -196,9 +194,9 @@ class certSearch(object):
 
     def get_raw_results(self):
         return self.searchAPI.get_raw_results()
-    
-    def load_cache(self,filename=None):
-        ''' load raw search results into raw_results from pickled file'''
+
+    def load_cache(self, filename=None):
+        """ load raw search results into raw_results from pickled file"""
         try:
             log(f"-Reading cached data from {filename}.pkl\n", "INFO")
             with open(f"{filename}-{self.search_engine}.pkl", "rb") as f:
@@ -208,144 +206,142 @@ class certSearch(object):
 
     def save_cache(self, filename=None):
         pickle.dump(self.searchAPI.raw_results, open(f"{filename}-{self.search_engine}.pkl", "wb"))
-  
+
     def enabled(self):
         return self.searchAPI.enabled
 
+
 class censysSearch(object):
     """ censys obj """
-    RESULT_FIELDS = ['443','11211','143','1433','161','25','3306','3389','465','5432','5672','631','6379','6443','8883','ip','993','995']
-    SEARCH_FIELDS = [ 
-                    '443.https.tls.certificate.parsed.names',
-                    '11211.memcached.banner.tls.certificate.parsed.names',
-                    '143.imap.starttls.tls.certificate.parsed.names',
-                    '1433.mssql.banner.tls.certificate.parsed.names',
-                    '161.snmp.banner.tls.certificate.parsed.names',
-                    '1883.mqtt.banner.tls.certificate.parsed.names',
-                    '25.smtp.starttls.tls.certificate.parsed.names',
-                    '3306.mysql.banner.tls.certificate.parsed.names',
-                    '3389.rdp.banner.tls.certificate.parsed.names',
-                    '465.smtp.tls.tls.certificate.parsed.names',
-                    '5432.postgres.banner.tls.certificate.parsed.names',
-                    '5672.amqp.banner.tls.certificate.parsed.names',
-                    '631.ipp.banner.tls.certificate.parsed.names',
-                    '6379.redis.banner.tls.certificate.parsed.names',
-                    '6443.kubernetes.banner.tls.certificate.parsed.names',
-                    '8883.mqtt.banner.tls.certificate.parsed.names',
-                    '9200.elasticsearch.banner.tls.certificate.parsed.names',
-                    '993.imaps.tls.tls.certificate.parsed.names',
-                    '995.pop3s.tls.tls.certificate.parsed.names',
-                    ]
+
+    RESULT_FIELDS = ["443", "11211", "143", "1433", "161", "25", "3306", "3389", "465", "5432", "5672", "631", "6379", "6443", "8883", "ip", "993", "995"]
+    SEARCH_FIELDS = [
+        "443.https.tls.certificate.parsed.names",
+        "11211.memcached.banner.tls.certificate.parsed.names",
+        "143.imap.starttls.tls.certificate.parsed.names",
+        "1433.mssql.banner.tls.certificate.parsed.names",
+        "161.snmp.banner.tls.certificate.parsed.names",
+        "1883.mqtt.banner.tls.certificate.parsed.names",
+        "25.smtp.starttls.tls.certificate.parsed.names",
+        "3306.mysql.banner.tls.certificate.parsed.names",
+        "3389.rdp.banner.tls.certificate.parsed.names",
+        "465.smtp.tls.tls.certificate.parsed.names",
+        "5432.postgres.banner.tls.certificate.parsed.names",
+        "5672.amqp.banner.tls.certificate.parsed.names",
+        "631.ipp.banner.tls.certificate.parsed.names",
+        "6379.redis.banner.tls.certificate.parsed.names",
+        "6443.kubernetes.banner.tls.certificate.parsed.names",
+        "8883.mqtt.banner.tls.certificate.parsed.names",
+        "9200.elasticsearch.banner.tls.certificate.parsed.names",
+        "993.imaps.tls.tls.certificate.parsed.names",
+        "995.pop3s.tls.tls.certificate.parsed.names",
+    ]
 
     def __init__(self, result_limit, api_key):
-        # parse SEARCHFIELDs and create a dict pointing to TLS 
-        self.search_key={}
+        # parse SEARCHFIELDs and create a dict pointing to TLS
+        self.search_key = {}
         for item in self.SEARCH_FIELDS:
-            terms=item.split('.')
-            self.search_key[terms[0]]=terms[:-3]
+            terms = item.split(".")
+            self.search_key[terms[0]] = terms[:-3]
         self.result_limit = result_limit
-        self.raw_results=[]
-        # parse and set API 
-        self.CENSYS_API_ID,self.CENSYS_API_SECRET=(None,None)
-        self.enabled=True
+        self.raw_results = []
+        # parse and set API
+        self.CENSYS_API_ID, self.CENSYS_API_SECRET = (None, None)
+        self.enabled = True
         if api_key:
-            self.CENSYS_API_ID, self.CENSYS_API_SECRET = api_key.split(':')
+            self.CENSYS_API_ID, self.CENSYS_API_SECRET = api_key.split(":")
         elif os.getenv("CENSYS_API", None):
-            self.CENSYS_API_ID, self.CENSYS_API_SECRET = os.environ["CENSYS_API"].split(':')
+            self.CENSYS_API_ID, self.CENSYS_API_SECRET = os.environ["CENSYS_API"].split(":")
         else:
             # if no API key available, set search enabled = False
-            self.enabled=False
+            self.enabled = False
 
-    def load(self,result):
+    def load(self, result):
         certinfo = {}
         tls = {}
 
         for port in result:
-            if self.search_key.get(port,None):
+            if self.search_key.get(port, None):
                 log(f"processing : port{port} {self.search_key[port]}")
-                tls=result
+                tls = result
                 for path in self.search_key[port]:
                     # iterate down dictionary until TLS certificate node reached
-                    if tls.get(path,None):
-                        tls=tls[path]
+                    if tls.get(path, None):
+                        tls = tls[path]
                     else:
                         log(f"ERROR in DATA!! {self.search_key[port]}")
                         pass
 
-                if not tls.get('certificate',None):
+                if not tls.get("certificate", None):
                     log(f"port {port} missing TLS cert")
                     break
-                if not tls['certificate']['parsed']['subject_key_info'].get('rsa_public_key',None):
+                if not tls["certificate"]["parsed"]["subject_key_info"].get("rsa_public_key", None):
                     log(f"rsa public key missing {port} {tls}")
-                    break           
-                if not tls['certificate']['parsed'].get('names',None):
+                    break
+                if not tls["certificate"]["parsed"].get("names", None):
                     log(f"names  missing {port} {tls}")
-                    break    
+                    break
 
                 certinfo = {
-                    'source' : "Censys",
-                    'ip' : result['ip'],
-                    'hostname' : result['ip'],
-                    'altnames' : tls['certificate']['parsed']['names'],
-                    'server_cert' : None,
-                    'trust_chain' : None,
-                    'expires' : tls['certificate']['parsed']['validity']['end'],
-                    'version' : tls['version'],
-                    'cipher' :  {'name' : tls['cipher_suite']['name'],
-                                'version' : tls['version'],
-                                },
-                    'pubkey' :  {'bits' : tls['certificate']['parsed']['subject_key_info']['rsa_public_key']['length'],
-                                 'type' : tls['certificate']['parsed']['subject_key_info']['key_algorithm']['name'],
-                                },
-                    'sig_alg' :  tls['certificate']['parsed']['signature_algorithm']['name'],
-                    'subject' : (tls['certificate']['parsed']['subject']).get('common_name',None),
-                    'issued' :  tls['certificate']['parsed']['validity']['start'],
-                    'validation' : tls['validation']['browser_trusted'],
+                    "source": "Censys",
+                    "ip": result["ip"],
+                    "hostname": result["ip"],
+                    "altnames": tls["certificate"]["parsed"]["names"],
+                    "server_cert": None,
+                    "trust_chain": None,
+                    "expires": tls["certificate"]["parsed"]["validity"]["end"],
+                    "version": tls["version"],
+                    "cipher": {"name": tls["cipher_suite"]["name"], "version": tls["version"],},
+                    "pubkey": {"bits": tls["certificate"]["parsed"]["subject_key_info"]["rsa_public_key"]["length"], "type": tls["certificate"]["parsed"]["subject_key_info"]["key_algorithm"]["name"],},
+                    "sig_alg": tls["certificate"]["parsed"]["signature_algorithm"]["name"],
+                    "subject": (tls["certificate"]["parsed"]["subject"]).get("common_name", None),
+                    "issued": tls["certificate"]["parsed"]["validity"]["start"],
+                    "validation": tls["validation"]["browser_trusted"],
                 }
-                if certinfo['subject']:
-                    certinfo['subject']=certinfo['subject'][0]
-                    
-                if not tls['validation']['browser_trusted']:
-                    certinfo['validation_reason']="validation error" 
+                if certinfo["subject"]:
+                    certinfo["subject"] = certinfo["subject"][0]
+
+                if not tls["validation"]["browser_trusted"]:
+                    certinfo["validation_reason"] = "validation error"
                 else:
-                    certinfo['validation_reason']=""
-                    
+                    certinfo["validation_reason"] = ""
+
                 try:
-                    certinfo['dhparams']=result['443']['https']['dhe']['dh_params']['prime']['length']
+                    certinfo["dhparams"] = result["443"]["https"]["dhe"]["dh_params"]["prime"]["length"]
                 except KeyError:
-                    certinfo['dhparams']=None
+                    certinfo["dhparams"] = None
                 try:
-                    certinfo['heartbleed_enabled']=result['443']['https']['heartbeat_enabled']
+                    certinfo["heartbleed_enabled"] = result["443"]["https"]["heartbeat_enabled"]
                 except KeyError:
-                    certinfo['heartbleed_enabled']=None
-                
-                if (datetime.strptime(tls['certificate']['parsed']['validity']['end'], "%Y-%m-%dT%H:%M:%SZ") < datetime.today()):
-                    certinfo['expired']=True
+                    certinfo["heartbleed_enabled"] = None
+
+                if datetime.strptime(tls["certificate"]["parsed"]["validity"]["end"], "%Y-%m-%dT%H:%M:%SZ") < datetime.today():
+                    certinfo["expired"] = True
                 else:
-                    certinfo['expired']=False
+                    certinfo["expired"] = False
 
         return certinfo
 
     def search(self, domain):
         """  call Shodan API and save result list to self.raw_results
         """
-        query = ' '.join([ '{0}:"{1}"'.format(x, domain) for x in self.SEARCH_FIELDS ])
+        query = " ".join(['{0}:"{1}"'.format(x, domain) for x in self.SEARCH_FIELDS])
         log(f"**Querying Censys with search query {query}\n", "INFO")
 
-        censys_cert= censys.ipv4.CensysIPv4(api_id=self.CENSYS_API_ID,api_secret=self.CENSYS_API_SECRET)
+        censys_cert = censys.ipv4.CensysIPv4(api_id=self.CENSYS_API_ID, api_secret=self.CENSYS_API_SECRET)
         try:
-            api = censys_cert.search(query, self.RESULT_FIELDS, flatten=False,max_records=1000)
+            api = censys_cert.search(query, self.RESULT_FIELDS, flatten=False, max_records=1000)
             self.raw_results = list(api)
         except censys.base.CensysUnauthorizedException:
-            sys.stderr.write('[+] Censys account details wrong. \n')
+            sys.stderr.write("[+] Censys account details wrong. \n")
             exit(1)
         except censys.base.CensysRateLimitExceededException:
-            sys.stderr.write('[+] Limit exceeded.')
+            sys.stderr.write("[+] Limit exceeded.")
             exit(1)
         except censys.base.CensysException as e:
             # catch the Censys Base exception, example "only 1000 first results are available"
-            sys.stderr.write('[-] Exception?, ' + repr(e))
-            exit(1) 
+            sys.stderr.write("[-] Exception?, " + repr(e))
+            exit(1)
 
     def get_results(self):
         return self.results
@@ -356,20 +352,22 @@ class censysSearch(object):
     def enabled(self):
         return self.enabled
 
+
 class shodanSearch(object):
     """ shodan search api
     """
+
     def __init__(self, result_limit, api_key):
-        self.raw_results=[]
+        self.raw_results = []
         self.result_limit = result_limit
         self.SHODAN_API = None
-        self.enabled=True
+        self.enabled = True
         if api_key:
             self.SHODAN_API = api_key
         elif os.getenv("SHODAN_API", None):
             self.SHODAN_API = os.environ["SHODAN_API"]
         else:
-            self.enabled=False
+            self.enabled = False
 
     def get_results(self):
         return self.results
@@ -383,8 +381,8 @@ class shodanSearch(object):
         api = Shodan(self.SHODAN_API)
         query = "ssl.cert.subject.cn:" + domain
         log(f"**Querying Shodan with Search query {query}\n", "INFO")
-        self.raw_results=list(api.search_cursor(query))
-        
+        self.raw_results = list(api.search_cursor(query))
+
     def load(self, result):
         """ take shodan result dict and convert it to a dict for use in grading
         """
@@ -405,10 +403,10 @@ class shodanSearch(object):
             "altnames": extract_altname(result["ssl"]["chain"][0]),
         }
         if not certinfo["hostname"]:
-            certinfo["hostname"]=""
+            certinfo["hostname"] = ""
         elif type(certinfo["hostname"]) is list:
-            certinfo["hostname"]=certinfo["hostname"][0]
-        
+            certinfo["hostname"] = certinfo["hostname"][0]
+
         certinfo["server_cert"] = result["ssl"]["chain"][0]
         certinfo["trust_chain"] = None
         if len(result["ssl"]["chain"]) > 1:
@@ -423,23 +421,22 @@ class shodanSearch(object):
 def print_report(certs):
     # print report
     table = PrettyTable()
-    table.field_names = ["Source","Hostname", "Subject", "AltNames", "Grade", "Issues"]
-    table._max_width = {"Source" : 2, "Hostname": 30, "Subject": 30, "AltNames": 30, "Grade": 5, "Issues": 50}
+    table.field_names = ["Source", "Hostname", "Subject", "AltNames", "Grade", "Issues"]
+    table._max_width = {"Source": 2, "Hostname": 30, "Subject": 30, "AltNames": 30, "Grade": 5, "Issues": 50}
     for cert in certs:
-        table.add_row([cert.source[0], cert.hostname, cert.subject, 
-                       ", ".join(cert.altnames) + "\n\n", cert.grade, ", ".join(cert.issues) + "\n\n"])
+        table.add_row([cert.source[0], cert.hostname, cert.subject, ", ".join(cert.altnames) + "\n\n", cert.grade, ", ".join(cert.issues) + "\n\n"])
     table.sortby = "Grade"
     print(table)
 
+
 def csv_output(domain, certs):
-     # optional CSV output
+    # optional CSV output
     if csv_output:
         with open(domain + ".csv", "w", newline="") as csvfile:
             certwriter = csv.writer(csvfile, quotechar='"')
-            certwriter.writerow(["Source","Hostname", "Subject", "AltNames", "Grade", "Issues"])
+            certwriter.writerow(["Source", "Hostname", "Subject", "AltNames", "Grade", "Issues"])
             for cert in certs:
-                certwriter.writerow([cert.source[0], cert.hostname, cert.subject, 
-                                     ", ".join(cert.altnames), cert.grade, ", ".join(cert.issues)])
+                certwriter.writerow([cert.source[0], cert.hostname, cert.subject, ", ".join(cert.altnames), cert.grade, ", ".join(cert.issues)])
 
 
 if __name__ == "__main__":
@@ -464,10 +461,9 @@ if __name__ == "__main__":
     ROOT_STORE = load_root_ca_list()
 
     certs = []
-    search_list = [certSearch("SHODAN", args.use_cache, args.result_limit, args.api_key_shodan),
-                   certSearch("CENSYS", args.use_cache, args.result_limit, args.api_key_censys) ]
-    
-    enabled_search_list=[]
+    search_list = [certSearch("SHODAN", args.use_cache, args.result_limit, args.api_key_shodan), certSearch("CENSYS", args.use_cache, args.result_limit, args.api_key_censys)]
+
+    enabled_search_list = []
     [enabled_search_list.append(search) for search in search_list if search.enabled()]
     if not enabled_search_list:
         parser.print_help()
