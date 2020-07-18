@@ -28,6 +28,7 @@ def extract_altname(server_crt):
 
         :param server_crt: list of PEM certs in UTF-8 string format
         :type server_crt: list
+        :return san: list of str hostnames
     """
     x509cert = crypto.load_certificate(crypto.FILETYPE_PEM, server_crt)
     san = ""
@@ -46,7 +47,6 @@ def load_root_ca_list(debug=False):
         :return: returns X509store obj loaded with trusted Cert.  
         :rtype: X509store
     """
-    store = None
     try:
         # Mac shipps with 175 root CA certs vs. 139 from pyOpenssl.  In my testing, the 175s vs. 139
         # didn't result in increase in validation count across 10k certs.  However your mileage may vary
@@ -58,10 +58,11 @@ def load_root_ca_list(debug=False):
                 cacert = crypto.load_certificate(crypto.FILETYPE_PEM, cert.as_text())
                 store.add_cert(cacert)
                 log(f"loading root CA store w/ {cacert.get_subject()} ") if debug else None
+            return store
     except EnvironmentError:  # parent of IOError, OSError *and* WindowsError where available
         log(f"No CA Store found at {certifi.where()}, can not validate\n\n", "ERROR")
         raise FileNotFoundError
-    return store
+    return None
 
 
 class graderCert(object):
