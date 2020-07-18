@@ -17,10 +17,10 @@ from shodan import Shodan
 ROOT_STORE = None
 
 
-def log(s, type="DEBUG"):
+LOGLEVELS = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
+def log(log_message, type="DEBUG"):
     """ log wrapper """
-    levels = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
-    logging.log(levels[type], s)
+    logging.log(LOGLEVELS[type], log_message)
 
 
 def extract_altname(server_crt):
