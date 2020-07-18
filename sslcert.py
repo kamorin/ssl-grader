@@ -18,7 +18,7 @@ ROOT_STORE = None
 
 
 LOGLEVELS = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
-def log(log_message, type="DEBUG"):
+def log(log_message, type="INFO"):
     """ log wrapper """
     logging.log(LOGLEVELS[type], log_message)
 
@@ -41,7 +41,7 @@ def extract_altname(server_crt):
     return san
 
 
-def load_root_ca_list(debug=False):
+def load_root_ca_list():
     """ load all certificates found in openssl cert.pem (via certifi.where())
         
         :return: returns X509store obj loaded with trusted Cert.  
@@ -57,7 +57,7 @@ def load_root_ca_list(debug=False):
             for cert in certs:
                 cacert = crypto.load_certificate(crypto.FILETYPE_PEM, cert.as_text())
                 store.add_cert(cacert)
-                log(f"loading root CA store w/ {cacert.get_subject()} ") if debug else None
+                log(f"loading root CA store w/ {cacert.get_subject().CN} ", "DEBUG")
             return store
     except EnvironmentError:  # parent of IOError, OSError *and* WindowsError where available
         log(f"No CA Store found at {certifi.where()}, can not validate\n\n", "ERROR")
@@ -122,7 +122,7 @@ class graderCert(object):
             self.issues.append("Failed Chain of Trust validation : " + self.validation_reason)
             self.grade -= 20
 
-    def verify_chain_of_trust(self, debug=False):
+    def verify_chain_of_trust(self):
         """  openssl manual validation of chain.  store validation result in self.validation 
             
             :param server_cert: server cert in PEM UTF-8 string format
@@ -131,12 +131,12 @@ class graderCert(object):
             :type trusted_chain: list of str
         """
         certificate = crypto.load_certificate(crypto.FILETYPE_PEM, self.server_cert)
-        log(f"loaded server cert: {certificate.get_subject().CN}", "INFO") if debug else None
+        log(f"loaded server cert: {certificate.get_subject().CN}", "DEBUG")
 
         if self.trust_chain:
             for trusted_cert_pem in self.trust_chain:
                 trusted_cert = crypto.load_certificate(crypto.FILETYPE_PEM, trusted_cert_pem)
-                log(f"added intermediate cert {trusted_cert.get_subject()}") if debug else None
+                log(f"added intermediate cert {trusted_cert.get_subject().CN}", "DEBUG")
                 ROOT_STORE.add_cert(trusted_cert)
 
         # and verify the the chain of trust
@@ -145,12 +145,12 @@ class graderCert(object):
         try:
             store_ctx.verify_certificate()
         except Exception as e:
-            log(f"Validation Failed: {e.args[0][2]} for {certificate.get_subject().CN}") if debug else None
+            log(f"Validation Failed: {e.args[0][2]} for {certificate.get_subject().CN}\n", "DEBUG")
             self.validation = False
             self.validation_reason = e.args[0][2]
             return
 
-        log(f"Validation Successful for {certificate.get_subject().CN}") if debug else None
+        log(f"Validation Successful for {certificate.get_subject().CN}\n", "DEBUG")
         self.validation = True
         self.validation_reason = None
 
@@ -266,8 +266,8 @@ class censysSearch(object):
                     if tls.get(path, None):
                         tls = tls[path]
                     else:
-                        log(f"ERROR in DATA!! {self.search_key[port]}")
-                        pass
+                        log(f"missing TLS cert on {self.search_key[port]}","INFO")
+                        break
 
                 if not tls.get("certificate", None):
                     log(f"port {port} missing TLS cert")
