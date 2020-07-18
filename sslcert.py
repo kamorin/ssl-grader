@@ -7,20 +7,12 @@ __copyright__ = "Copyright 2020"
 __license__ = "GPL"
 __version__ = "1.0.1"
 
-import sys, os
-from shodan import Shodan
-from pprint import pprint, pformat
-import pickle
+import argparse, csv, datetime, logging, pickle, os, sys
+import censys.certificates, censys.ipv4, certifi, pem
 from OpenSSL import crypto
-from datetime import datetime
-import certifi
-import pem
-import logging
-import argparse
+from pprint import pprint, pformat
 from prettytable import PrettyTable
-import csv
-import censys.certificates
-import censys.ipv4
+from shodan import Shodan
 
 ROOT_STORE = None
 
@@ -320,7 +312,7 @@ class censysSearch(object):
                 except KeyError:
                     certinfo["heartbleed_enabled"] = None
 
-                if datetime.strptime(tls["certificate"]["parsed"]["validity"]["end"], "%Y-%m-%dT%H:%M:%SZ") < datetime.today():
+                if datetime.datetime.strptime(tls["certificate"]["parsed"]["validity"]["end"], "%Y-%m-%dT%H:%M:%SZ") < datetime.datetime.today():
                     certinfo["expired"] = True
                 else:
                     certinfo["expired"] = False
@@ -404,7 +396,7 @@ class shodanSearch(object):
             "cipher": result["ssl"]["cipher"],
             "version": result["ssl"]["versions"],
             "dhparams": result["ssl"].get("dhparams", {"bits": float("inf"), "fingerprint": ""}),
-            "issued": datetime.strptime(result["ssl"]["cert"]["issued"], "%Y%m%d%H%M%SZ"),
+            "issued": datetime.datetime.strptime(result["ssl"]["cert"]["issued"], "%Y%m%d%H%M%SZ"),
             "altnames": extract_altname(result["ssl"]["chain"][0]),
         }
         if not certinfo["hostname"]:
