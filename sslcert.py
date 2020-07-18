@@ -7,28 +7,20 @@ __copyright__ = "Copyright 2020"
 __license__ = "GPL"
 __version__ = "1.0.1"
 
-import sys, os
-from shodan import Shodan
-from pprint import pprint, pformat
-import pickle
+import argparse, csv, datetime, logging, pickle, os, sys
+import censys.certificates, censys.ipv4, certifi, pem
 from OpenSSL import crypto
-from datetime import datetime
-import certifi
-import pem
-import logging
-import argparse
+from pprint import pprint, pformat
 from prettytable import PrettyTable
-import csv
-import censys.certificates
-import censys.ipv4
+from shodan import Shodan
 
 ROOT_STORE = None
 
 
-def log(s, type="DEBUG"):
+LOGLEVELS = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
+def log(log_message, type="DEBUG"):
     """ log wrapper """
-    levels = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
-    logging.log(levels[type], s)
+    logging.log(LOGLEVELS[type], log_message)
 
 
 def extract_altname(server_crt):
@@ -36,6 +28,7 @@ def extract_altname(server_crt):
 
         :param server_crt: list of PEM certs in UTF-8 string format
         :type server_crt: list
+        :return san: list of str hostnames
     """
     x509cert = crypto.load_certificate(crypto.FILETYPE_PEM, server_crt)
     san = ""
@@ -54,7 +47,6 @@ def load_root_ca_list(debug=False):
         :return: returns X509store obj loaded with trusted Cert.  
         :rtype: X509store
     """
-    store = None
     try:
         # Mac shipps with 175 root CA certs vs. 139 from pyOpenssl.  In my testing, the 175s vs. 139
         # didn't result in increase in validation count across 10k certs.  However your mileage may vary
@@ -66,10 +58,11 @@ def load_root_ca_list(debug=False):
                 cacert = crypto.load_certificate(crypto.FILETYPE_PEM, cert.as_text())
                 store.add_cert(cacert)
                 log(f"loading root CA store w/ {cacert.get_subject()} ") if debug else None
+            return store
     except EnvironmentError:  # parent of IOError, OSError *and* WindowsError where available
         log(f"No CA Store found at {certifi.where()}, can not validate\n\n", "ERROR")
         raise FileNotFoundError
-    return store
+    return None
 
 
 class graderCert(object):
@@ -97,7 +90,11 @@ class graderCert(object):
         # dhparams': {'bits': 4096,
         # ECDHE enable forward secrecy with modern web browsers
 
-        if "RSA" not in self.cipher["name"] or "ADH" in self.cipher["name"] or "CBC" in self.cipher["name"] or "RC4" in self.cipher["name"] or "TLS-RSA" in self.cipher["name"]:
+        if "RSA" not in self.cipher["name"] or \
+           "ADH" in self.cipher["name"] or  \
+           "CBC" in self.cipher["name"] or  \
+           "RC4" in self.cipher["name"] or  \
+           "TLS-RSA" in self.cipher["name"]:
             self.issues.append(f"Bad cipher {self.cipher['name']}")
             # Cipher Block Chaining (CBC) ciphers were marked as weak (around March 2019)
             self.grade -= 10
@@ -292,7 +289,8 @@ class censysSearch(object):
                     "expires": tls["certificate"]["parsed"]["validity"]["end"],
                     "version": tls["version"],
                     "cipher": {"name": tls["cipher_suite"]["name"], "version": tls["version"],},
-                    "pubkey": {"bits": tls["certificate"]["parsed"]["subject_key_info"]["rsa_public_key"]["length"], "type": tls["certificate"]["parsed"]["subject_key_info"]["key_algorithm"]["name"],},
+                    "pubkey": {"bits": tls["certificate"]["parsed"]["subject_key_info"]["rsa_public_key"]["length"], 
+                               "type": tls["certificate"]["parsed"]["subject_key_info"]["key_algorithm"]["name"],},
                     "sig_alg": tls["certificate"]["parsed"]["signature_algorithm"]["name"],
                     "subject": (tls["certificate"]["parsed"]["subject"]).get("common_name", None),
                     "issued": tls["certificate"]["parsed"]["validity"]["start"],
@@ -315,7 +313,7 @@ class censysSearch(object):
                 except KeyError:
                     certinfo["heartbleed_enabled"] = None
 
-                if datetime.strptime(tls["certificate"]["parsed"]["validity"]["end"], "%Y-%m-%dT%H:%M:%SZ") < datetime.today():
+                if datetime.datetime.strptime(tls["certificate"]["parsed"]["validity"]["end"], "%Y-%m-%dT%H:%M:%SZ") < datetime.datetime.today():
                     certinfo["expired"] = True
                 else:
                     certinfo["expired"] = False
@@ -399,7 +397,7 @@ class shodanSearch(object):
             "cipher": result["ssl"]["cipher"],
             "version": result["ssl"]["versions"],
             "dhparams": result["ssl"].get("dhparams", {"bits": float("inf"), "fingerprint": ""}),
-            "issued": datetime.strptime(result["ssl"]["cert"]["issued"], "%Y%m%d%H%M%SZ"),
+            "issued": datetime.datetime.strptime(result["ssl"]["cert"]["issued"], "%Y%m%d%H%M%SZ"),
             "altnames": extract_altname(result["ssl"]["chain"][0]),
         }
         if not certinfo["hostname"]:
@@ -424,7 +422,8 @@ def print_report(certs):
     table.field_names = ["Source", "Hostname", "Subject", "AltNames", "Grade", "Issues"]
     table._max_width = {"Source": 2, "Hostname": 30, "Subject": 30, "AltNames": 30, "Grade": 5, "Issues": 50}
     for cert in certs:
-        table.add_row([cert.source[0], cert.hostname, cert.subject, ", ".join(cert.altnames) + "\n\n", cert.grade, ", ".join(cert.issues) + "\n\n"])
+        table.add_row([cert.source[0], cert.hostname, cert.subject, 
+                       ", ".join(cert.altnames) + "\n\n", cert.grade, ", ".join(cert.issues) + "\n\n"])
     table.sortby = "Grade"
     print(table)
 
@@ -436,7 +435,8 @@ def csv_output(domain, certs):
             certwriter = csv.writer(csvfile, quotechar='"')
             certwriter.writerow(["Source", "Hostname", "Subject", "AltNames", "Grade", "Issues"])
             for cert in certs:
-                certwriter.writerow([cert.source[0], cert.hostname, cert.subject, ", ".join(cert.altnames), cert.grade, ", ".join(cert.issues)])
+                certwriter.writerow([cert.source[0], cert.hostname, cert.subject, 
+                                     ", ".join(cert.altnames), cert.grade, ", ".join(cert.issues)])
 
 
 if __name__ == "__main__":
@@ -461,7 +461,8 @@ if __name__ == "__main__":
     ROOT_STORE = load_root_ca_list()
 
     certs = []
-    search_list = [certSearch("SHODAN", args.use_cache, args.result_limit, args.api_key_shodan), certSearch("CENSYS", args.use_cache, args.result_limit, args.api_key_censys)]
+    search_list = [certSearch("SHODAN", args.use_cache, args.result_limit, args.api_key_shodan), 
+                   certSearch("CENSYS", args.use_cache, args.result_limit, args.api_key_censys)]
 
     enabled_search_list = []
     [enabled_search_list.append(search) for search in search_list if search.enabled()]
