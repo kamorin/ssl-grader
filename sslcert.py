@@ -259,24 +259,24 @@ class censysSearch(object):
 
         for port in result:
             if self.search_key.get(port, None):
-                log(f"processing : port{port} {self.search_key[port]}")
+                log(f"processing : port{port} {self.search_key[port]}","DEBUG")
                 tls = result
                 for path in self.search_key[port]:
                     # iterate down dictionary until TLS certificate node reached
                     if tls.get(path, None):
                         tls = tls[path]
                     else:
-                        log(f"missing TLS cert on {self.search_key[port]}","INFO")
+                        log(f"missing TLS cert on {self.search_key[port]}","DEBUG")
                         break
 
                 if not tls.get("certificate", None):
-                    log(f"port {port} missing TLS cert")
+                    log(f"port {port} missing TLS cert","DEBUG")
                     break
                 if not tls["certificate"]["parsed"]["subject_key_info"].get("rsa_public_key", None):
-                    log(f"rsa public key missing {port} {tls}")
+                    log(f"rsa public key missing {port} {tls}","DEBUG")
                     break
                 if not tls["certificate"]["parsed"].get("names", None):
-                    log(f"names  missing {port} {tls}")
+                    log(f"names  missing {port} {tls}","DEBUG")
                     break
 
                 certinfo = {
